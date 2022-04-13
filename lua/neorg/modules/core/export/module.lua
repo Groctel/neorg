@@ -56,23 +56,6 @@ module.public = {
             neorg.modules.get_module_config("core.export." .. ftype)
     end,
 
-    get_filetype = function(file, force_filetype)
-        local filetype = force_filetype
-
-        -- Getting an extension properly is... difficult
-        -- This is why we leverage Neovim instead.
-        -- We create a dummy buffer with the filepath the user wanted to export to
-        -- and query the filetype from there.
-        if not filetype then
-            local dummy_buffer = vim.uri_to_bufnr("file://" .. file)
-            vim.fn.bufload(dummy_buffer)
-            filetype = vim.api.nvim_buf_get_option(dummy_buffer, "filetype")
-            vim.api.nvim_buf_delete(dummy_buffer, { force = true })
-        end
-
-        return filetype
-    end,
-
     export = function(buffer, filetype)
         local converter, converter_config = module.public.get_converter(filetype)
 
@@ -161,7 +144,7 @@ module.public = {
 
 module.on_event = function(event)
     if event.type == "core.neorgcmd.events.export.to-file" then
-        local filetype = module.public.get_filetype(event.content[1], event.content[2])
+        local filetype = neorg.utils.get_filetype(event.content[1], event.content[2])
         local exported = module.public.export(event.buffer, filetype)
 
         vim.loop.fs_open(event.content[1], "w", 438, function(err, fd)

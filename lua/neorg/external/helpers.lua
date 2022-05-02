@@ -346,7 +346,7 @@ neorg.lib = {
 
             -- luacheck: push ignore
             function_pointer = function(...)
-                return prev
+                return prev, unpack(params)
             end
             -- luacheck: pop
         end

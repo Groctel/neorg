@@ -2,6 +2,12 @@ local modules = require("neorg.modules")
 local module = modules.create("core.integrations.truezen")
 local require_relative = require("neorg.utils").require_relative
 
+
+local this = {
+    truezen = nil,
+}
+
+
 module.load = function()
     local success, truezen = pcall(require, "true-zen.main")
 
@@ -12,12 +18,10 @@ module.load = function()
 
     truezen_setup.setup(module.config)
 
-    module.private.truezen = truezen
+    -- TODO: We're not doing anything with this!
+    this.truezen = truezen
 end
 
-module.private = {
-    truezen = nil,
-}
 
 module.config = require_relative(..., "config")
 

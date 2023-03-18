@@ -54,6 +54,12 @@ local module = modules.create("core.keybinds")
 local log = neorg.log
 local require_relative = require("neorg.utils").require_relative
 
+
+local this = {
+    requested_keys = {},
+}
+
+
 module.setup = function()
     return {
         success = true,
@@ -330,7 +336,7 @@ module.public = {
             module.config.keybind_presets[module.config.keybind_preset](payload)
         end
 
-        for _, callback in pairs(module.private.requested_keys) do
+        for _, callback in pairs(this.requested_keys) do
             callback(payload)
         end
 
@@ -384,13 +390,10 @@ module.public = {
     end,
 
     request_keys = function(module_name, callback)
-        module.private.requested_keys[module_name] = callback
+        this.requested_keys[module_name] = callback
     end,
 }
 
-module.private = {
-    requested_keys = {},
-}
 
 module.neorg_post_load = module.public.sync
 

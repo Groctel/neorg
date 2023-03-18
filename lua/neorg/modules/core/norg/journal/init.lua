@@ -26,6 +26,294 @@ local module = modules.create("core.norg.journal")
 local log = neorg.log
 local require_relative = require("neorg.utils").require_relative
 
+local this = {}
+
+
+--- Opens a diary entry at the given time
+---@param time number #The time to open the journal entry at as returned by `os.time()`
+---@param custom_date? string #A YYYY-mm-dd string that specifies a date to open the diary at instead
+function this.open_diary(time, custom_date)
+    local workspace = module.config.workspace
+        or module.required["core.norg.dirman"].get_current_workspace()[1]
+    local folder_name = module.config.journal_folder
+    local template_name = module.config.template_name
+
+    if custom_date then
+        local year, month, day = custom_date:match("^(%d%d%d%d)-(%d%d)-(%d%d)$")
+
+        if not year or not month or not day then
+            log.error("Wrong date format: use YYYY-mm-dd")
+            return
+        end
+
+        time = os.time({
+            year = year,
+            month = month,
+            day = day,
+        })
+    end
+
+    local path = os.date(
+        type(module.config.strategy) == "function" and module.config.strategy(os.date("*t", time))
+            or module.config.strategy,
+        time
+    )
+
+    local workspace_path = module.required["core.norg.dirman"].get_workspace(workspace)
+
+    local journal_file_exists = module.required["core.norg.dirman"].file_exists(
+        workspace_path .. "/" .. folder_name .. neorg.configuration.pathsep .. path
+    )
+
+    module.required["core.norg.dirman"].create_file(folder_name .. neorg.configuration.pathsep .. path, workspace)
+
+    module.required["core.norg.dirman"].create_file(folder_name .. neorg.configuration.pathsep .. path, workspace)
+
+    if
+        not journal_file_exists
+        and module.config.use_template
+        and module.required["core.norg.dirman"].file_exists(
+            workspace_path .. "/" .. folder_name .. "/" .. template_name
+        )
+    then
+        vim.cmd("0read " .. workspace_path .. "/" .. folder_name .. "/" .. template_name .. "| w")
+    end
+end
+
+--- Opens a diary entry for tomorrow's date
+function this.diary_tomorrow()
+    this.open_diary(os.time() + 24 * 60 * 60)
+end
+
+--- Opens a diary entry for yesterday's date
+function this.diary_yesterday()
+    this.open_diary(os.time() - 24 * 60 * 60)
+end
+
+--- Opens a diary entry for today's date
+function this.diary_today()
+    this.open_diary()
+end
+
+--- Creates a template file
+function this.create_template()
+    local workspace = module.config.workspace
+    local folder_name = module.config.journal_folder
+    local template_name = module.config.template_name
+
+    module.required["core.norg.dirman"].create_file(
+        folder_name .. neorg.configuration.pathsep .. template_name,
+        workspace or module.required["core.norg.dirman"].get_current_workspace()[1]
+    )
+end
+
+--- Opens the toc file
+function this.open_toc()
+    local workspace = module.config.workspace
+        or module.required["core.norg.dirman"].get_current_workspace()[1]
+    local index = modules.get_module_config("core.norg.dirman").index
+    local folder_name = module.config.journal_folder
+
+    -- If the toc exists, open it, if not, create it
+    if module.required["core.norg.dirman"].file_exists(folder_name .. neorg.configuration.pathsep .. index) then
+        module.required["core.norg.dirman"].open_file(
+            workspace,
+            folder_name .. neorg.configuration.pathsep .. index
+        )
+    else
+        this.create_toc()
+    end
+end
+
+--- Creates or updates the toc file
+function this.create_toc()
+    local workspace = module.config.workspace
+        or module.required["core.norg.dirman"].get_current_workspace()[1]
+    local index = modules.get_module_config("core.norg.dirman").index
+    local folder_name = module.config.journal_folder
+
+    -- Each entry is a table that contains tables like { yy, mm, dd, link, title }
+    local toc_entries = {}
+
+    -- Get a filesystem handle for the files in the journal folder
+    -- path is for each subfolder
+    local get_fs_handle = function(path)
+        path = path or ""
+        local handle = vim.loop.fs_scandir(folder_name .. neorg.configuration.pathsep .. path)
+
+        if type(handle) ~= "userdata" then
+            error(neorg.lib.lazy_string_concat("Failed to scan directory '", workspace, path, "': ", handle))
+        end
+
+        return handle
+    end
+
+    -- Gets the title from the metadata of a file, must be called in a vim.schedule
+    local get_title = function(file)
+        local buffer = vim.fn.bufadd(folder_name .. neorg.configuration.pathsep .. file)
+        local meta = module.required["core.integrations.treesitter"].get_document_metadata(buffer)
+        local title = meta["title"]
+        return title
+    end
+
+    vim.loop.fs_scandir(folder_name .. neorg.configuration.pathsep, function(err, handle)
+        assert(not err, neorg.lib.lazy_string_concat("Unable to generate TOC for directory '", folder_name, "' - ", err))
+
+        while true do
+            -- Name corresponds to either a YYYY-mm-dd.norg file, or just the year ("nested" strategy)
+            local name, type = vim.loop.fs_scandir_next(handle)
+
+            if not name then
+                break
+            end
+
+            -- Handle nested entries
+            if type == "directory" then
+                local years_handle = get_fs_handle(name)
+                while true do
+                    -- mname is the month
+                    local mname, mtype = vim.loop.fs_scandir_next(years_handle)
+
+                    if not mname then
+                        break
+                    end
+
+                    if mtype == "directory" then
+                        local months_handle = get_fs_handle(name .. neorg.configuration.pathsep .. mname)
+                        while true do
+                            -- dname is the day
+                            local dname, dtype = vim.loop.fs_scandir_next(months_handle)
+
+                            if not dname then
+                                break
+                            end
+
+                            -- If it's a .norg file, also ensure it is a day entry
+                            if dtype == "file" and string.match(dname, "%d%d%.norg") then
+                                -- Split the file name
+                                local file = vim.split(dname, ".", { plain = true })
+
+                                vim.schedule(function()
+                                    -- Get the title from the metadata, else, it just defaults to the name of the file
+                                    local title = get_title(
+                                        name
+                                            .. neorg.configuration.pathsep
+                                            .. mname
+                                            .. neorg.configuration.pathsep
+                                            .. dname
+                                    ) or file[1]
+
+                                    -- Insert a new entry
+                                    table.insert(toc_entries, {
+                                        tonumber(name),
+                                        tonumber(mname),
+                                        tonumber(file[1]),
+                                        "{:$"
+                                            .. neorg.configuration.pathsep
+                                            .. module.config.journal_folder
+                                            .. neorg.configuration.pathsep
+                                            .. name
+                                            .. neorg.configuration.pathsep
+                                            .. mname
+                                            .. neorg.configuration.pathsep
+                                            .. file[1]
+                                            .. ":}",
+                                        title,
+                                    })
+                                end)
+                            end
+                        end
+                    end
+                end
+            end
+
+            -- Handles flat entries
+            -- If it is a .norg file, but it's not any user generated file.
+            -- The match is here to avoid handling files made by the user, like a template file, or
+            -- the toc file
+            if type == "file" and string.match(name, "%d+-%d+-%d+%.norg") then
+                -- Split yyyy-mm-dd to a table
+                local file = vim.split(name, ".", { plain = true })
+                local parts = vim.split(file[1], "-")
+
+                -- Convert the parts into numbers
+                for k, v in pairs(parts) do
+                    parts[k] = tonumber(v)
+                end
+
+                vim.schedule(function()
+                    -- Get the title from the metadata, else, it just defaults to the name of the file
+                    local title = get_title(name) or parts[3]
+
+                    -- And insert a new entry that corresponds to the file
+                    table.insert(toc_entries, {
+                        parts[1],
+                        parts[2],
+                        parts[3],
+                        "{:$"
+                            .. neorg.configuration.pathsep
+                            .. module.config.journal_folder
+                            .. neorg.configuration.pathsep
+                            .. file[1]
+                            .. ":}",
+                        title,
+                    })
+                end)
+            end
+        end
+
+        vim.schedule(function()
+            -- Gets a default format for the entries
+            local format = module.config.toc_format
+                or function(entries)
+                    local months_text = {
+                        "January",
+                        "February",
+                        "March",
+                        "April",
+                        "May",
+                        "June",
+                        "July",
+                        "August",
+                        "September",
+                        "October",
+                        "November",
+                        "December",
+                    }
+                    -- Convert the entries into a certain format to be written
+                    local output = {}
+                    local current_year
+                    local current_month
+                    for _, entry in ipairs(entries) do
+                        -- Don't print the year and month if they haven't changed
+                        if not current_year or current_year < entry[1] then
+                            current_year = entry[1]
+                            table.insert(output, "* " .. current_year)
+                        end
+                        if not current_month or current_month < entry[2] then
+                            current_month = entry[2]
+                            table.insert(output, "** " .. months_text[current_month])
+                        end
+
+                        -- Prints the file link
+                        table.insert(output, entry[4] .. string.format("[%s]", entry[5]))
+                    end
+
+                    return output
+                end
+
+            module.required["core.norg.dirman"].create_file(
+                folder_name .. neorg.configuration.pathsep .. index,
+                workspace or module.required["core.norg.dirman"].get_current_workspace()[1]
+            )
+
+            -- The current buffer now must be the toc file, so we set our toc entries there
+            vim.api.nvim_buf_set_lines(0, 0, -1, false, format(toc_entries))
+            vim.cmd("w")
+        end)
+    end)
+end
+
 
 module.setup = function()
     return {
@@ -39,292 +327,6 @@ module.setup = function()
     }
 end
 
-module.private = {
-    --- Opens a diary entry at the given time
-    ---@param time number #The time to open the journal entry at as returned by `os.time()`
-    ---@param custom_date? string #A YYYY-mm-dd string that specifies a date to open the diary at instead
-    open_diary = function(time, custom_date)
-        local workspace = module.config.workspace
-            or module.required["core.norg.dirman"].get_current_workspace()[1]
-        local folder_name = module.config.journal_folder
-        local template_name = module.config.template_name
-
-        if custom_date then
-            local year, month, day = custom_date:match("^(%d%d%d%d)-(%d%d)-(%d%d)$")
-
-            if not year or not month or not day then
-                log.error("Wrong date format: use YYYY-mm-dd")
-                return
-            end
-
-            time = os.time({
-                year = year,
-                month = month,
-                day = day,
-            })
-        end
-
-        local path = os.date(
-            type(module.config.strategy) == "function" and module.config.strategy(os.date("*t", time))
-                or module.config.strategy,
-            time
-        )
-
-        local workspace_path = module.required["core.norg.dirman"].get_workspace(workspace)
-
-        local journal_file_exists = module.required["core.norg.dirman"].file_exists(
-            workspace_path .. "/" .. folder_name .. neorg.configuration.pathsep .. path
-        )
-
-        module.required["core.norg.dirman"].create_file(folder_name .. neorg.configuration.pathsep .. path, workspace)
-
-        module.required["core.norg.dirman"].create_file(folder_name .. neorg.configuration.pathsep .. path, workspace)
-
-        if
-            not journal_file_exists
-            and module.config.use_template
-            and module.required["core.norg.dirman"].file_exists(
-                workspace_path .. "/" .. folder_name .. "/" .. template_name
-            )
-        then
-            vim.cmd("0read " .. workspace_path .. "/" .. folder_name .. "/" .. template_name .. "| w")
-        end
-    end,
-
-    --- Opens a diary entry for tomorrow's date
-    diary_tomorrow = function()
-        module.private.open_diary(os.time() + 24 * 60 * 60)
-    end,
-
-    --- Opens a diary entry for yesterday's date
-    diary_yesterday = function()
-        module.private.open_diary(os.time() - 24 * 60 * 60)
-    end,
-
-    --- Opens a diary entry for today's date
-    diary_today = function()
-        module.private.open_diary()
-    end,
-
-    --- Creates a template file
-    create_template = function()
-        local workspace = module.config.workspace
-        local folder_name = module.config.journal_folder
-        local template_name = module.config.template_name
-
-        module.required["core.norg.dirman"].create_file(
-            folder_name .. neorg.configuration.pathsep .. template_name,
-            workspace or module.required["core.norg.dirman"].get_current_workspace()[1]
-        )
-    end,
-
-    --- Opens the toc file
-    open_toc = function()
-        local workspace = module.config.workspace
-            or module.required["core.norg.dirman"].get_current_workspace()[1]
-        local index = modules.get_module_config("core.norg.dirman").index
-        local folder_name = module.config.journal_folder
-
-        -- If the toc exists, open it, if not, create it
-        if module.required["core.norg.dirman"].file_exists(folder_name .. neorg.configuration.pathsep .. index) then
-            module.required["core.norg.dirman"].open_file(
-                workspace,
-                folder_name .. neorg.configuration.pathsep .. index
-            )
-        else
-            module.private.create_toc()
-        end
-    end,
-
-    --- Creates or updates the toc file
-    create_toc = function()
-        local workspace = module.config.workspace
-            or module.required["core.norg.dirman"].get_current_workspace()[1]
-        local index = modules.get_module_config("core.norg.dirman").index
-        local folder_name = module.config.journal_folder
-
-        -- Each entry is a table that contains tables like { yy, mm, dd, link, title }
-        local toc_entries = {}
-
-        -- Get a filesystem handle for the files in the journal folder
-        -- path is for each subfolder
-        local get_fs_handle = function(path)
-            path = path or ""
-            local handle = vim.loop.fs_scandir(folder_name .. neorg.configuration.pathsep .. path)
-
-            if type(handle) ~= "userdata" then
-                error(neorg.lib.lazy_string_concat("Failed to scan directory '", workspace, path, "': ", handle))
-            end
-
-            return handle
-        end
-
-        -- Gets the title from the metadata of a file, must be called in a vim.schedule
-        local get_title = function(file)
-            local buffer = vim.fn.bufadd(folder_name .. neorg.configuration.pathsep .. file)
-            local meta = module.required["core.integrations.treesitter"].get_document_metadata(buffer)
-            local title = meta["title"]
-            return title
-        end
-
-        vim.loop.fs_scandir(folder_name .. neorg.configuration.pathsep, function(err, handle)
-            assert(not err, neorg.lib.lazy_string_concat("Unable to generate TOC for directory '", folder_name, "' - ", err))
-
-            while true do
-                -- Name corresponds to either a YYYY-mm-dd.norg file, or just the year ("nested" strategy)
-                local name, type = vim.loop.fs_scandir_next(handle)
-
-                if not name then
-                    break
-                end
-
-                -- Handle nested entries
-                if type == "directory" then
-                    local years_handle = get_fs_handle(name)
-                    while true do
-                        -- mname is the month
-                        local mname, mtype = vim.loop.fs_scandir_next(years_handle)
-
-                        if not mname then
-                            break
-                        end
-
-                        if mtype == "directory" then
-                            local months_handle = get_fs_handle(name .. neorg.configuration.pathsep .. mname)
-                            while true do
-                                -- dname is the day
-                                local dname, dtype = vim.loop.fs_scandir_next(months_handle)
-
-                                if not dname then
-                                    break
-                                end
-
-                                -- If it's a .norg file, also ensure it is a day entry
-                                if dtype == "file" and string.match(dname, "%d%d%.norg") then
-                                    -- Split the file name
-                                    local file = vim.split(dname, ".", { plain = true })
-
-                                    vim.schedule(function()
-                                        -- Get the title from the metadata, else, it just defaults to the name of the file
-                                        local title = get_title(
-                                            name
-                                                .. neorg.configuration.pathsep
-                                                .. mname
-                                                .. neorg.configuration.pathsep
-                                                .. dname
-                                        ) or file[1]
-
-                                        -- Insert a new entry
-                                        table.insert(toc_entries, {
-                                            tonumber(name),
-                                            tonumber(mname),
-                                            tonumber(file[1]),
-                                            "{:$"
-                                                .. neorg.configuration.pathsep
-                                                .. module.config.journal_folder
-                                                .. neorg.configuration.pathsep
-                                                .. name
-                                                .. neorg.configuration.pathsep
-                                                .. mname
-                                                .. neorg.configuration.pathsep
-                                                .. file[1]
-                                                .. ":}",
-                                            title,
-                                        })
-                                    end)
-                                end
-                            end
-                        end
-                    end
-                end
-
-                -- Handles flat entries
-                -- If it is a .norg file, but it's not any user generated file.
-                -- The match is here to avoid handling files made by the user, like a template file, or
-                -- the toc file
-                if type == "file" and string.match(name, "%d+-%d+-%d+%.norg") then
-                    -- Split yyyy-mm-dd to a table
-                    local file = vim.split(name, ".", { plain = true })
-                    local parts = vim.split(file[1], "-")
-
-                    -- Convert the parts into numbers
-                    for k, v in pairs(parts) do
-                        parts[k] = tonumber(v)
-                    end
-
-                    vim.schedule(function()
-                        -- Get the title from the metadata, else, it just defaults to the name of the file
-                        local title = get_title(name) or parts[3]
-
-                        -- And insert a new entry that corresponds to the file
-                        table.insert(toc_entries, {
-                            parts[1],
-                            parts[2],
-                            parts[3],
-                            "{:$"
-                                .. neorg.configuration.pathsep
-                                .. module.config.journal_folder
-                                .. neorg.configuration.pathsep
-                                .. file[1]
-                                .. ":}",
-                            title,
-                        })
-                    end)
-                end
-            end
-
-            vim.schedule(function()
-                -- Gets a default format for the entries
-                local format = module.config.toc_format
-                    or function(entries)
-                        local months_text = {
-                            "January",
-                            "February",
-                            "March",
-                            "April",
-                            "May",
-                            "June",
-                            "July",
-                            "August",
-                            "September",
-                            "October",
-                            "November",
-                            "December",
-                        }
-                        -- Convert the entries into a certain format to be written
-                        local output = {}
-                        local current_year
-                        local current_month
-                        for _, entry in ipairs(entries) do
-                            -- Don't print the year and month if they haven't changed
-                            if not current_year or current_year < entry[1] then
-                                current_year = entry[1]
-                                table.insert(output, "* " .. current_year)
-                            end
-                            if not current_month or current_month < entry[2] then
-                                current_month = entry[2]
-                                table.insert(output, "** " .. months_text[current_month])
-                            end
-
-                            -- Prints the file link
-                            table.insert(output, entry[4] .. string.format("[%s]", entry[5]))
-                        end
-
-                        return output
-                    end
-
-                module.required["core.norg.dirman"].create_file(
-                    folder_name .. neorg.configuration.pathsep .. index,
-                    workspace or module.required["core.norg.dirman"].get_current_workspace()[1]
-                )
-
-                -- The current buffer now must be the toc file, so we set our toc entries there
-                vim.api.nvim_buf_set_lines(0, 0, -1, false, format(toc_entries))
-                vim.cmd("w")
-            end)
-        end)
-    end,
-}
 
 
 module.config = require_relative(..., "config")
@@ -373,19 +375,19 @@ end
 module.on_event = function(event)
     if vim.tbl_contains({ "core.keybinds", "core.neorgcmd" }, event.referrer.name) then
         if event.name == "journal.tomorrow" then
-            module.private.diary_tomorrow()
+            this.diary_tomorrow()
         elseif event.name == "journal.yesterday" then
-            module.private.diary_yesterday()
+            this.diary_yesterday()
         elseif event.name == "journal.custom" then
-            module.private.open_diary(nil, event.payload[1])
+            this.open_diary(nil, event.payload[1])
         elseif event.name == "journal.today" then
-            module.private.diary_today()
+            this.diary_today()
         elseif event.name == "journal.template" then
-            module.private.create_template()
+            this.create_template()
         elseif event.name == "journal.toc.open" then
-            module.private.open_toc()
+            this.open_toc()
         elseif event.name == "journal.toc.update" then
-            module.private.create_toc()
+            this.create_toc()
         end
     end
 end

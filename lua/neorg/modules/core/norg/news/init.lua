@@ -10,6 +10,13 @@ local modules = require("neorg.modules")
 local module = modules.create("core.norg.news")
 local require_relative = require("neorg.utils").require_relative
 
+
+local this = {
+    old_news = {},
+    new_news = {},
+}
+
+
 local function is_version_greater_than(ver1, ver2)
     -- Here we assume that the versions aren't malformed
     ver1, ver2 = neorg.utils.parse_version_string(ver1), neorg.utils.parse_version_string(ver2)
@@ -73,15 +80,15 @@ module.load = function()
             if is_version_greater_than(version, cached_neorg_version) then
                 neorg.log.trace("Version", version, "is greater than", cached_neorg_version)
 
-                module.private.new_news[version] = filepath
+                this.new_news[version] = filepath
             else
-                module.private.old_news[version] = filepath
+                this.old_news[version] = filepath
             end
         end
 
         local lib = neorg.lib
 
-        local old_keys, new_keys = vim.tbl_keys(module.private.old_news), vim.tbl_keys(module.private.new_news)
+        local old_keys, new_keys = vim.tbl_keys(this.old_news), vim.tbl_keys(this.new_news)
 
         local commands_table = {
             news = {
@@ -126,7 +133,7 @@ module.load = function()
             ["core.neorgcmd"] = lib.to_keys(lib.extract(commands_table.news.subcommands, "name"), true),
         }
 
-        if not vim.tbl_isempty(module.private.new_news) then
+        if not vim.tbl_isempty(this.new_news) then
             vim.schedule(function()
                 vim.notify(string.format(
                     [[
@@ -225,16 +232,12 @@ module.public = {
     end,
 }
 
-module.private = {
-    old_news = {},
-    new_news = {},
-}
 
 module.on_event = function(event)
     neorg.lib.match(event.name)({
         ["news.all"] = function()
             module.public.create_display(
-                module.public.get_content(vim.tbl_extend("error", module.private.old_news, module.private.new_news))
+                module.public.get_content(vim.tbl_extend("error", this.old_news, this.new_news))
             )
 
             module.required["core.storage"].store(module.name, {
@@ -243,11 +246,11 @@ module.on_event = function(event)
         end,
 
         ["news.old"] = function()
-            module.public.create_display(module.public.get_content(module.private.old_news))
+            module.public.create_display(module.public.get_content(this.old_news))
         end,
 
         ["news.new"] = function()
-            module.public.create_display(module.public.get_content(module.private.new_news))
+            module.public.create_display(module.public.get_content(this.new_news))
 
             module.required["core.storage"].store(module.name, {
                 news_state = neorg.configuration.version,
@@ -267,7 +270,7 @@ module.on_event = function(event)
                 local version = event.name:sub(string.len("news.new.") + 1)
 
                 module.public.create_display(
-                    module.public.get_content({ [version] = module.private.new_news[version] })
+                    module.public.get_content({ [version] = this.new_news[version] })
                 )
 
                 if
@@ -281,7 +284,7 @@ module.on_event = function(event)
                 local version = event.name:sub(string.len("news.old.") + 1)
 
                 module.public.create_display(
-                    module.public.get_content({ [version] = module.private.old_news[version] })
+                    module.public.get_content({ [version] = this.old_news[version] })
                 )
             end
         end,

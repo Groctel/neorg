@@ -2,6 +2,12 @@ local neorg = require("neorg.core")
 local modules = require("neorg.modules")
 local module = modules.create("core.clipboard")
 
+
+local this = {
+    callbacks = {},
+}
+
+
 module.setup = function()
     return {
         requires = {
@@ -25,12 +31,12 @@ module.load = function()
                 local node = module.required["core.integrations.treesitter"].get_first_node_on_line(data.buf, i)
 
                 while node:parent() do
-                    if module.private.callbacks[node:type()] then
+                    if this.callbacks[node:type()] then
                         local register = vim.fn.getreg(vim.v.register)
 
                         vim.fn.setreg(
                             vim.v.register,
-                            neorg.lib.filter(module.private.callbacks[node:type()], function(_, callback)
+                            neorg.lib.filter(this.callbacks[node:type()], function(_, callback)
                                 if callback.strict and (range[1][1] < i or range[2][1] > node:end_()) then
                                     return
                                 end
@@ -64,14 +70,11 @@ module.load = function()
     })
 end
 
-module.private = {
-    callbacks = {},
-}
 
 module.public = {
     add_callback = function(node_type, func, strict)
-        module.private.callbacks[node_type] = module.private.callbacks[node_type] or {}
-        table.insert(module.private.callbacks[node_type], { cb = func, strict = strict })
+        this.callbacks[node_type] = this.callbacks[node_type] or {}
+        table.insert(this.callbacks[node_type], { cb = func, strict = strict })
     end,
 }
 

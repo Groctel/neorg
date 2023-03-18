@@ -11,6 +11,272 @@ local module = modules.create("core.norg.esupports.hop")
 local job = require("plenary.job")
 local require_relative = require("neorg.utils").require_relative
 
+local this = {}
+--- Damerau-levenstein implementation
+function this.calculate_similarity(lhs, rhs)
+    -- https://en.wikipedia.org/wiki/Damerau%E2%80%93Levenshtein_distance
+    local str1 = lhs
+    local str2 = rhs
+    local matrix = {}
+    local cost
+
+    -- build matrix
+    for i = 0, #str1 do
+        matrix[i] = {}
+        matrix[i][0] = i
+    end
+
+    for j = 0, #str2 do
+        matrix[0][j] = j
+    end
+
+    for j = 1, #str2 do
+        for i = 1, #str1 do
+            if str1:sub(i, i) == str2:sub(j, j) then
+                cost = 0
+            else
+                cost = 1
+            end
+            matrix[i][j] = math.min(matrix[i - 1][j] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j - 1] + cost)
+            if
+                i > 1
+                and j > 1
+                and str1:sub(i, i) == str2:sub(j - 1, j - 1)
+                and str1:sub(i - 1, i - 1) == str2:sub(j, j)
+            then
+                matrix[i][j] = math.min(matrix[i][j], matrix[i - 2][j - 2] + cost)
+            end
+        end
+    end
+
+    return matrix[#str1][#str2]
+        / (
+            (#str1 + #str2)
+            + (function()
+                local index = 1
+                local ret = 0
+
+                while index < #str1 do
+                    if str1:sub(index, index):lower() == str2:sub(index, index):lower() then
+                        ret = ret + 0.2
+                    end
+
+                    index = index + 1
+                end
+
+                return ret
+            end)()
+        )
+end
+
+--- Fuzzy fixes a link with a loose type checking query
+---@param parsed_link_information table #A table as returned by `parse_link()`
+---@return table #A table of similarities (fuzzed items)
+function this.fix_link_loose(parsed_link_information)
+    local generic_query = [[
+        (_
+          [(strong_carryover_set
+             (strong_carryover
+               name: (tag_name) @tag_name
+               (tag_parameters) @title
+               (#eq? @tag_name "name")))
+           (weak_carryover_set
+             (weak_carryover
+               name: (tag_name) @tag_name
+               (tag_parameters) @title
+               (#eq? @tag_name "name")))]?
+            title: (paragraph_segment) @title)
+    ]]
+
+    return this.fix_link(parsed_link_information, generic_query)
+end
+
+--- Fuzzy fixes a link with a strict type checking query
+---@param parsed_link_information table #A table as returned by `parse_link()`
+---@return table #A table of similarities (fuzzed items)
+function this.fix_link_strict(parsed_link_information)
+    local query = neorg.lib.match(parsed_link_information.link_type)({
+        generic = [[
+            (_
+              [(strong_carryover_set
+                 (strong_carryover
+                   name: (tag_name) @tag_name
+                   (tag_parameters) @title
+                   (#eq? @tag_name "name")))
+               (weak_carryover_set
+                 (weak_carryover
+                   name: (tag_name) @tag_name
+                   (tag_parameters) @title
+                   (#eq? @tag_name "name")))]?
+                    title: (paragraph_segment) @title)
+        ]],
+        [{ "definition", "footnote" }] = string.format(
+            [[
+            [(single_%s
+               [(strong_carryover_set
+                  (strong_carryover
+                    name: (tag_name) @tag_name
+                    (tag_parameters) @title
+                    (#eq? @tag_name "name")))
+                (weak_carryover_set
+                  (weak_carryover
+                    name: (tag_name) @tag_name
+                    (tag_parameters) @title
+                    (#eq? @tag_name "name")))]?
+               (single_%s_prefix)
+               title: (paragraph_segment) @title)
+             (multi_%s
+               [(strong_carryover_set
+                  (strong_carryover
+                   name: (tag_name) @tag_name
+                   (tag_parameters) @title
+                   (#eq? @tag_name "name")))
+                (weak_carryover_set
+                  (weak_carryover
+                    name: (tag_name) @tag_name
+                    (tag_parameters) @title
+                    (#eq? @tag_name "name")))]?
+                (multi_%s_prefix)
+                  title: (paragraph_segment) @title)]
+        ]],
+            neorg.lib.reparg(parsed_link_information.link_type, 4)
+        ),
+        _ = string.format(
+            [[
+                (%s
+                   [(strong_carryover_set
+                      (strong_carryover
+                        name: (tag_name) @tag_name
+                        (tag_parameters) @title
+                        (#eq? @tag_name "name")))
+                    (weak_carryover_set
+                      (weak_carryover
+                        name: (tag_name) @tag_name
+                        (tag_parameters) @title
+                        (#eq? @tag_name "name")))]?
+                    (%s_prefix)
+                    title: (paragraph_segment) @title)
+            ]],
+            neorg.lib.reparg(parsed_link_information.link_type, 2)
+        ),
+    })
+
+    return this.fix_link(parsed_link_information, query)
+end
+
+--- Query all similar targets that a link could be pointing to
+---@param parsed_link_information table #A table as returned by `parse_link()`
+---@param query_str string #The query to be used during the search
+---@return table #A table of similarities (fuzzed items)
+function this.fix_link(parsed_link_information, query_str)
+    local buffer = vim.api.nvim_get_current_buf()
+
+    if parsed_link_information.link_file_text then
+        local expanded_link_text =
+            module.required["core.norg.dirman.utils"].expand_path(parsed_link_information.link_file_text)
+
+        if expanded_link_text ~= vim.fn.expand("%:p") then
+            -- We are dealing with a foreign file
+            buffer = vim.uri_to_bufnr("file://" .. expanded_link_text)
+        end
+    end
+
+    local query = vim.treesitter.parse_query("norg", query_str)
+
+    local document_root = module.required["core.integrations.treesitter"].get_document_root(buffer)
+
+    if not document_root then
+        return
+    end
+
+    local similarities = {
+        -- Example: { 0.6, "title", node }
+    }
+
+    for id, node in query:iter_captures(document_root, buffer) do
+        local capture_name = query.captures[id]
+
+        if capture_name == "title" then
+            local text = module.required["core.integrations.treesitter"].get_node_text(node, buffer)
+            local similarity = this.calculate_similarity(parsed_link_information.link_location_text, text)
+
+            -- If our match is similar enough then add it to the list
+            if similarity < module.config.fuzzing_threshold then
+                table.insert(similarities, { similarity = similarity, text = text, node = node:parent() })
+            end
+        end
+    end
+
+    if vim.tbl_isempty(similarities) then
+        vim.notify("Sorry, Neorg couldn't fix that link :(")
+    end
+
+    table.sort(similarities, function(lhs, rhs)
+        return lhs.similarity < rhs.similarity
+    end)
+
+    return similarities
+end
+
+--- Writes a link that was fixed through fuzzing into the buffer
+---@param link_node userdata #The treesitter node of the link, extracted by e.g. `extract_link_node()`
+---@param parsed_link_information table #A table as returned by `parse_link()`
+---@param similarities table #The table of similarities as returned by `fix_link_*()`
+---@param force_type boolean #If true will forcefully overwrite the link type to the target type as well (e.g. would convert `#` -> `*`)
+function this.write_fixed_link(link_node, parsed_link_information, similarities, force_type)
+    local most_similar = similarities[1]
+
+    if not link_node or not most_similar then
+        return
+    end
+
+    local range = module.required["core.integrations.treesitter"].get_node_range(link_node)
+
+    local prefix = (
+        parsed_link_information.link_type == "generic" and not force_type
+        and "#"
+        or neorg.lib.match(most_similar.node:type())({
+            heading1 = "*",
+            heading2 = "**",
+            heading3 = "***",
+            heading4 = "****",
+            heading5 = "*****",
+            heading6 = "******",
+            single_definition = "$",
+            multi_definition = "$",
+            single_footnote = "^",
+            multi_footnote = "^",
+            _ = "#",
+        })) .. " "
+
+    local function callback(replace)
+        vim.api.nvim_buf_set_text(
+            0,
+            range.row_start,
+            range.column_start,
+            range.row_end,
+            range.column_end,
+            { replace }
+        )
+    end
+
+    callback(
+        "{"
+            .. (
+                parsed_link_information.link_file_text
+                and neorg.lib.lazy_string_concat(":", parsed_link_information.link_file_text, ":")
+                or "")
+            .. prefix
+            .. most_similar.text
+            .. "}"
+            .. (
+                parsed_link_information.link_description
+                and neorg.lib.lazy_string_concat("[", parsed_link_information.link_description, "]")
+                or "")
+    )
+end
+
+
 module.setup = function()
     return {
         success = true,
@@ -115,26 +381,26 @@ module.public = {
             :desc("Fixing the link will perform a fuzzy search on every item of the same type in the file")
             :desc("and make the link point to the closest match:")
             :flag("f", "Attempt to fix the link", function()
-                local similarities = module.private.fix_link_strict(parsed_link)
+                local similarities = this.fix_link_strict(parsed_link)
 
                 if not similarities or vim.tbl_isempty(similarities) then
                     return
                 end
 
-                module.private.write_fixed_link(node, parsed_link, similarities)
+                this.write_fixed_link(node, parsed_link, similarities)
             end)
             :blank()
             :desc("Does the same as the above keybind, however doesn't limit matches to those")
             :desc("defined by the link type. This means that even if the link points to a level 1")
             :desc("heading this fixing algorithm will be able to match any other item type:")
             :flag("F", "Attempt to fix the link (loose fuzzing)", function()
-                local similarities = module.private.fix_link_loose(parsed_link)
+                local similarities = this.fix_link_loose(parsed_link)
 
                 if not similarities or vim.tbl_isempty(similarities) then
                     return
                 end
 
-                module.private.write_fixed_link(node, parsed_link, similarities, true)
+                this.write_fixed_link(node, parsed_link, similarities, true)
             end)
             :blank()
             :warning("The below flags currently do not work, this is a beta build.")
@@ -532,272 +798,6 @@ module.public = {
                 end
             end,
         })
-    end,
-}
-
-module.private = {
-    --- Damerau-levenstein implementation
-    calculate_similarity = function(lhs, rhs)
-        -- https://en.wikipedia.org/wiki/Damerau%E2%80%93Levenshtein_distance
-        local str1 = lhs
-        local str2 = rhs
-        local matrix = {}
-        local cost
-
-        -- build matrix
-        for i = 0, #str1 do
-            matrix[i] = {}
-            matrix[i][0] = i
-        end
-
-        for j = 0, #str2 do
-            matrix[0][j] = j
-        end
-
-        for j = 1, #str2 do
-            for i = 1, #str1 do
-                if str1:sub(i, i) == str2:sub(j, j) then
-                    cost = 0
-                else
-                    cost = 1
-                end
-                matrix[i][j] = math.min(matrix[i - 1][j] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j - 1] + cost)
-                if
-                    i > 1
-                    and j > 1
-                    and str1:sub(i, i) == str2:sub(j - 1, j - 1)
-                    and str1:sub(i - 1, i - 1) == str2:sub(j, j)
-                then
-                    matrix[i][j] = math.min(matrix[i][j], matrix[i - 2][j - 2] + cost)
-                end
-            end
-        end
-
-        return matrix[#str1][#str2]
-            / (
-                (#str1 + #str2)
-                + (function()
-                    local index = 1
-                    local ret = 0
-
-                    while index < #str1 do
-                        if str1:sub(index, index):lower() == str2:sub(index, index):lower() then
-                            ret = ret + 0.2
-                        end
-
-                        index = index + 1
-                    end
-
-                    return ret
-                end)()
-            )
-    end,
-
-    --- Fuzzy fixes a link with a loose type checking query
-    ---@param parsed_link_information table #A table as returned by `parse_link()`
-    ---@return table #A table of similarities (fuzzed items)
-    fix_link_loose = function(parsed_link_information)
-        local generic_query = [[
-            (_
-              [(strong_carryover_set
-                 (strong_carryover
-                   name: (tag_name) @tag_name
-                   (tag_parameters) @title
-                   (#eq? @tag_name "name")))
-               (weak_carryover_set
-                 (weak_carryover
-                   name: (tag_name) @tag_name
-                   (tag_parameters) @title
-                   (#eq? @tag_name "name")))]?
-                title: (paragraph_segment) @title)
-        ]]
-
-        return module.private.fix_link(parsed_link_information, generic_query)
-    end,
-
-    --- Fuzzy fixes a link with a strict type checking query
-    ---@param parsed_link_information table #A table as returned by `parse_link()`
-    ---@return table #A table of similarities (fuzzed items)
-    fix_link_strict = function(parsed_link_information)
-        local query = neorg.lib.match(parsed_link_information.link_type)({
-            generic = [[
-                (_
-                  [(strong_carryover_set
-                     (strong_carryover
-                       name: (tag_name) @tag_name
-                       (tag_parameters) @title
-                       (#eq? @tag_name "name")))
-                   (weak_carryover_set
-                     (weak_carryover
-                       name: (tag_name) @tag_name
-                       (tag_parameters) @title
-                       (#eq? @tag_name "name")))]?
-                        title: (paragraph_segment) @title)
-            ]],
-            [{ "definition", "footnote" }] = string.format(
-                [[
-                [(single_%s
-                   [(strong_carryover_set
-                      (strong_carryover
-                        name: (tag_name) @tag_name
-                        (tag_parameters) @title
-                        (#eq? @tag_name "name")))
-                    (weak_carryover_set
-                      (weak_carryover
-                        name: (tag_name) @tag_name
-                        (tag_parameters) @title
-                        (#eq? @tag_name "name")))]?
-                   (single_%s_prefix)
-                   title: (paragraph_segment) @title)
-                 (multi_%s
-                   [(strong_carryover_set
-                      (strong_carryover
-                       name: (tag_name) @tag_name
-                       (tag_parameters) @title
-                       (#eq? @tag_name "name")))
-                    (weak_carryover_set
-                      (weak_carryover
-                        name: (tag_name) @tag_name
-                        (tag_parameters) @title
-                        (#eq? @tag_name "name")))]?
-                    (multi_%s_prefix)
-                      title: (paragraph_segment) @title)]
-            ]],
-                neorg.lib.reparg(parsed_link_information.link_type, 4)
-            ),
-            _ = string.format(
-                [[
-                    (%s
-                       [(strong_carryover_set
-                          (strong_carryover
-                            name: (tag_name) @tag_name
-                            (tag_parameters) @title
-                            (#eq? @tag_name "name")))
-                        (weak_carryover_set
-                          (weak_carryover
-                            name: (tag_name) @tag_name
-                            (tag_parameters) @title
-                            (#eq? @tag_name "name")))]?
-                        (%s_prefix)
-                        title: (paragraph_segment) @title)
-                ]],
-                neorg.lib.reparg(parsed_link_information.link_type, 2)
-            ),
-        })
-
-        return module.private.fix_link(parsed_link_information, query)
-    end,
-
-    --- Query all similar targets that a link could be pointing to
-    ---@param parsed_link_information table #A table as returned by `parse_link()`
-    ---@param query_str string #The query to be used during the search
-    ---@return table #A table of similarities (fuzzed items)
-    fix_link = function(parsed_link_information, query_str)
-        local buffer = vim.api.nvim_get_current_buf()
-
-        if parsed_link_information.link_file_text then
-            local expanded_link_text =
-                module.required["core.norg.dirman.utils"].expand_path(parsed_link_information.link_file_text)
-
-            if expanded_link_text ~= vim.fn.expand("%:p") then
-                -- We are dealing with a foreign file
-                buffer = vim.uri_to_bufnr("file://" .. expanded_link_text)
-            end
-        end
-
-        local query = vim.treesitter.parse_query("norg", query_str)
-
-        local document_root = module.required["core.integrations.treesitter"].get_document_root(buffer)
-
-        if not document_root then
-            return
-        end
-
-        local similarities = {
-            -- Example: { 0.6, "title", node }
-        }
-
-        for id, node in query:iter_captures(document_root, buffer) do
-            local capture_name = query.captures[id]
-
-            if capture_name == "title" then
-                local text = module.required["core.integrations.treesitter"].get_node_text(node, buffer)
-                local similarity = module.private.calculate_similarity(parsed_link_information.link_location_text, text)
-
-                -- If our match is similar enough then add it to the list
-                if similarity < module.config.fuzzing_threshold then
-                    table.insert(similarities, { similarity = similarity, text = text, node = node:parent() })
-                end
-            end
-        end
-
-        if vim.tbl_isempty(similarities) then
-            vim.notify("Sorry, Neorg couldn't fix that link :(")
-        end
-
-        table.sort(similarities, function(lhs, rhs)
-            return lhs.similarity < rhs.similarity
-        end)
-
-        return similarities
-    end,
-
-    --- Writes a link that was fixed through fuzzing into the buffer
-    ---@param link_node userdata #The treesitter node of the link, extracted by e.g. `extract_link_node()`
-    ---@param parsed_link_information table #A table as returned by `parse_link()`
-    ---@param similarities table #The table of similarities as returned by `fix_link_*()`
-    ---@param force_type boolean #If true will forcefully overwrite the link type to the target type as well (e.g. would convert `#` -> `*`)
-    write_fixed_link = function(link_node, parsed_link_information, similarities, force_type)
-        local most_similar = similarities[1]
-
-        if not link_node or not most_similar then
-            return
-        end
-
-        local range = module.required["core.integrations.treesitter"].get_node_range(link_node)
-
-        local prefix = (
-            parsed_link_information.link_type == "generic" and not force_type
-            and "#"
-            or neorg.lib.match(most_similar.node:type())({
-                heading1 = "*",
-                heading2 = "**",
-                heading3 = "***",
-                heading4 = "****",
-                heading5 = "*****",
-                heading6 = "******",
-                single_definition = "$",
-                multi_definition = "$",
-                single_footnote = "^",
-                multi_footnote = "^",
-                _ = "#",
-            })) .. " "
-
-        local function callback(replace)
-            vim.api.nvim_buf_set_text(
-                0,
-                range.row_start,
-                range.column_start,
-                range.row_end,
-                range.column_end,
-                { replace }
-            )
-        end
-
-        callback(
-            "{"
-                .. (
-                    parsed_link_information.link_file_text
-                    and neorg.lib.lazy_string_concat(":", parsed_link_information.link_file_text, ":")
-                    or "")
-                .. prefix
-                .. most_similar.text
-                .. "}"
-                .. (
-                    parsed_link_information.link_description
-                    and neorg.lib.lazy_string_concat("[", parsed_link_information.link_description, "]")
-                    or "")
-        )
     end,
 }
 

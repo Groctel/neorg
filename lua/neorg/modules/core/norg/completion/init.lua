@@ -23,14 +23,14 @@ local require_relative = require("neorg.utils").require_relative
 
 module.config = require_relative(..., "config")
 
+local this = {
+    engine = nil,
+}
 
 module.setup = function()
     return { success = true, requires = { "core.integrations.treesitter" } }
 end
 
-module.private = {
-    engine = nil,
-}
 
 module.load = function()
     -- If we have not defined an engine then bail
@@ -41,21 +41,21 @@ module.load = function()
 
     -- If our engine is compe then attempt to load the integration module for nvim-compe
     if module.config.engine == "nvim-compe" and modules.load_module("core.integrations.nvim-compe") then
-        module.private.engine = modules.get_module("core.integrations.nvim-compe")
+        this.engine = modules.get_module("core.integrations.nvim-compe")
     elseif module.config.engine == "nvim-cmp" and modules.load_module("core.integrations.nvim-cmp") then
-        module.private.engine = modules.get_module("core.integrations.nvim-cmp")
+        this.engine = modules.get_module("core.integrations.nvim-cmp")
     else
         neorg.log.error("Unable to load completion module -", module.config.engine, "is not a recognized engine.")
         return
     end
 
     -- Set a special function in the integration module to allow it to communicate with us
-    module.private.engine.invoke_completion_engine = function(context)
+    this.engine.invoke_completion_engine = function(context)
         return module.public.complete(context)
     end
 
     -- Create the integration engine's source
-    module.private.engine.create_source({
+    this.engine.create_source({
         completions = module.config.completions,
     })
 end

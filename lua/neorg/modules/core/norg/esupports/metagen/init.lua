@@ -17,7 +17,7 @@ end
 module.config = require_relative(..., "config")
 
 
-module.private = {
+local this = {
     buffers = {},
     listen_event = "none",
 }
@@ -205,10 +205,10 @@ module.load = function()
 
     if module.config.type == "auto" then
         module.required["core.autocommands"].enable_autocommand("BufEnter")
-        module.private.listen_event = "bufenter"
+        this.listen_event = "bufenter"
     elseif module.config.type == "empty" then
         module.required["core.autocommands"].enable_autocommand("BufNewFile")
-        module.private.listen_event = "bufnewfile"
+        this.listen_event = "bufnewfile"
     end
 
     if module.config.update_date then
@@ -224,21 +224,21 @@ end
 
 module.on_event = function(event)
     if
-        event.name == (module.private.listen_event)
+        event.name == (this.listen_event)
         and event.payload.norg
         and vim.api.nvim_buf_is_loaded(event.buffer)
         and vim.api.nvim_buf_get_option(event.buffer, "modifiable")
-        and not module.private.buffers[event.buffer]
+        and not this.buffers[event.buffer]
         and not vim.startswith(event.filehead, "neorg://") -- Do not inject metadata on displays created by neorg by default
     then
         module.public.inject_metadata(event.buffer)
-        module.private.buffers[event.buffer] = true
+        this.buffers[event.buffer] = true
     elseif event.name == "inject-metadata" then
         module.public.inject_metadata(event.buffer, true)
-        module.private.buffers[event.buffer] = true
+        this.buffers[event.buffer] = true
     elseif event.name == "update-metadata" then
         module.public.update_metadata(event.buffer)
-        module.private.buffers[event.buffer] = true
+        this.buffers[event.buffer] = true
     end
 end
 

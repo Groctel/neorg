@@ -17,6 +17,154 @@ local neorg = require("neorg.core")
 local modules = require("neorg.modules")
 local module = modules.create("core.queries.native")
 
+
+local this = {
+    data = {
+        -- Must be a table of keys like buffer = string_content
+        temp_bufs = {},
+    },
+}
+
+
+--- Returns a list of child nodes (from `parent`) that matches a `tree`
+---@param parent userdata
+---@param tree core.queries.native.tree_node
+---@return table
+function this.matching_nodes(parent, tree, bufnr)
+    local res = {}
+    local where = tree.where
+    local matched_query, how_to_fix =
+        this.matching_query(parent, tree.query, { recursive = tree.recursive })
+
+    if type(matched_query) == "string" then
+        return matched_query, how_to_fix
+    end
+
+    if not where then
+        return matched_query
+    else
+        for _, matched in pairs(matched_query) do
+            local matched_where = this.predicate_where(matched, where, { bufnr = bufnr })
+            if matched_where then
+                table.insert(res, matched)
+            end
+        end
+    end
+
+    return res
+end
+
+--- Get a list of child nodes (from `parent`) that match the provided `query`
+--- @see First implementation in: https://github.com/danymat/neogen/blob/main/lua/neogen/utilities/nodes.lua
+---@param parent userdata
+---@param query table
+---@param opts table
+---   - opts.recursive (bool):      if true will recursively find the matching query
+---@return table
+function this.matching_query(parent, query, opts)
+    vim.validate({
+        parent = { parent, "userdata" },
+        query = { query, "table" },
+        opts = { opts, "table", true },
+    })
+    opts = opts or {}
+    local res = {}
+
+    if not query then
+        return "No 'queries' value present in the query object!",
+            [[
+Be sure to supply a query parameter, one that looks as such:
+{
+query = { "all", "heading1" }, -- You can use any node type here
+}
+        ]]
+    end
+
+    if vim.fn.len(query) < 2 then
+        return "Not enough queries supplied! Expected at least 2 but got " .. tostring(#query),
+            ([[
+Be sure to supply a second parameter, that being the type of node you would like to operate on.
+You should change your line to something like:
+{
+query = { "%s", "heading1" }
+}
+Instead.
+        ]]):format(query[1] or "all")
+    end
+
+    if not vim.tbl_contains({ "all", "first", "match" }, query[1]) then
+        return "Syntax error: " .. query[1] .. " is not a valid node operation.",
+            ([[
+Use a supported node operation. Neorg currently supports "all", "first" and "match".
+With that in mind, you can do something like this (for example):
+{
+query = { "all", "%s" }
+}
+        ]]):format(query[2])
+    end
+
+    -------------------------
+
+    for node in parent:iter_children() do
+        if node:type() == query[2] then
+            -- query : { "first", "node_name"} first child node that match node_name
+            if query[1] == "first" then
+                table.insert(res, node)
+                break
+                -- query : { "match", "node_name", "test" } all node_name nodes that match "test" content
+                -- elseif query[1] == "match" then
+                -- TODO Match node content
+                -- query : { "all", "node_name" } all child nodes that match node_name
+            elseif query[1] == "all" then
+                table.insert(res, node)
+            end
+        end
+
+        if opts.recursive then
+            local found = this.matching_query(node, query, { recursive = true })
+            vim.list_extend(res, found)
+        end
+    end
+
+    return res
+end
+
+--- Checks if `parent` node matches a `where` query and returns a predicate accordingly
+---@param parent userdata
+---@param where table
+---@param opts table
+---   - opts.bufnr (number):    used in where[1] == "child_content" (in order to get the node's content)
+---@return boolean
+function this.predicate_where(parent, where, opts)
+    opts = opts or {}
+
+    if not where or #where == 0 then
+        return true
+    end
+
+    -- Where statements requesting children nodes from parent node
+    for node in parent:iter_children() do
+        if where[1] == "child_exists" then
+            if node:type() == where[2] then
+                return true
+            end
+        end
+
+        if where[1] == "child_content" then
+            local temp_buf = module.public.get_temp_buf(opts.bufnr)
+            if
+                node:type() == where[2]
+                and vim.split(vim.treesitter.query.get_node_text(node, temp_buf), "\n")[1] == where[3]
+            then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+
 module.setup = function()
     return {
         success = true,
@@ -37,7 +185,7 @@ module.public = {
         local res = results or {}
 
         for _, subtree in pairs(tree) do
-            local matched, how_to_fix = module.private.matching_nodes(parent, subtree, bufnr)
+            local matched, how_to_fix = this.matching_nodes(parent, subtree, bufnr)
 
             if type(matched) == "string" then
                 neorg.log.error(
@@ -150,7 +298,7 @@ module.public = {
     get_temp_buf = function(buf, opts)
         opts = opts or {}
         -- If we don't have any previous private data, get the file text
-        if not module.private.data.temp_bufs[buf] then
+        if not this.data.temp_bufs[buf] then
             -- Get the file name from bufnr
             local uri = vim.uri_from_bufnr(buf)
             local fname = vim.uri_to_fname(uri)
@@ -180,17 +328,17 @@ module.public = {
             vim.api.nvim_buf_set_lines(temp_buf, 0, -1, false, lines)
             vim.api.nvim_buf_attach(temp_buf, false, {
                 on_lines = function()
-                    module.private.data.temp_bufs[buf].changed = true
+                    this.data.temp_bufs[buf].changed = true
                 end,
             })
-            module.private.data.temp_bufs[buf] = { buf = temp_buf, changed = false }
+            this.data.temp_bufs[buf] = { buf = temp_buf, changed = false }
         end
 
-        return module.private.data.temp_bufs[buf].buf
+        return this.data.temp_bufs[buf].buf
     end,
 
     apply_temp_changes = function(buf)
-        local temp_buf = module.private.data.temp_bufs[buf]
+        local temp_buf = this.data.temp_bufs[buf]
         if temp_buf and temp_buf.changed then
             -- Write the lines to original file
             local lines = vim.api.nvim_buf_get_lines(temp_buf.buf, 0, -1, false)
@@ -215,155 +363,10 @@ module.public = {
     ---@param buf number #The content relative to the provided buffer
     delete_content = function(buf)
         if buf then
-            module.private.data.temp_bufs[buf] = nil
+            this.data.temp_bufs[buf] = nil
         else
-            module.private.data.temp_bufs = {}
+            this.data.temp_bufs = {}
         end
-    end,
-}
-
-module.private = {
-    data = {
-        -- Must be a table of keys like buffer = string_content
-        temp_bufs = {},
-    },
-
-    --- Returns a list of child nodes (from `parent`) that matches a `tree`
-    ---@param parent userdata
-    ---@param tree core.queries.native.tree_node
-    ---@return table
-    matching_nodes = function(parent, tree, bufnr)
-        local res = {}
-        local where = tree.where
-        local matched_query, how_to_fix =
-            module.private.matching_query(parent, tree.query, { recursive = tree.recursive })
-
-        if type(matched_query) == "string" then
-            return matched_query, how_to_fix
-        end
-
-        if not where then
-            return matched_query
-        else
-            for _, matched in pairs(matched_query) do
-                local matched_where = module.private.predicate_where(matched, where, { bufnr = bufnr })
-                if matched_where then
-                    table.insert(res, matched)
-                end
-            end
-        end
-
-        return res
-    end,
-
-    --- Get a list of child nodes (from `parent`) that match the provided `query`
-    --- @see First implementation in: https://github.com/danymat/neogen/blob/main/lua/neogen/utilities/nodes.lua
-    ---@param parent userdata
-    ---@param query table
-    ---@param opts table
-    ---   - opts.recursive (bool):      if true will recursively find the matching query
-    ---@return table
-    matching_query = function(parent, query, opts)
-        vim.validate({
-            parent = { parent, "userdata" },
-            query = { query, "table" },
-            opts = { opts, "table", true },
-        })
-        opts = opts or {}
-        local res = {}
-
-        if not query then
-            return "No 'queries' value present in the query object!",
-                [[
-Be sure to supply a query parameter, one that looks as such:
-{
-    query = { "all", "heading1" }, -- You can use any node type here
-}
-            ]]
-        end
-
-        if vim.fn.len(query) < 2 then
-            return "Not enough queries supplied! Expected at least 2 but got " .. tostring(#query),
-                ([[
-Be sure to supply a second parameter, that being the type of node you would like to operate on.
-You should change your line to something like:
-{
-    query = { "%s", "heading1" }
-}
-Instead.
-            ]]):format(query[1] or "all")
-        end
-
-        if not vim.tbl_contains({ "all", "first", "match" }, query[1]) then
-            return "Syntax error: " .. query[1] .. " is not a valid node operation.",
-                ([[
-Use a supported node operation. Neorg currently supports "all", "first" and "match".
-With that in mind, you can do something like this (for example):
-{
-    query = { "all", "%s" }
-}
-            ]]):format(query[2])
-        end
-
-        -------------------------
-
-        for node in parent:iter_children() do
-            if node:type() == query[2] then
-                -- query : { "first", "node_name"} first child node that match node_name
-                if query[1] == "first" then
-                    table.insert(res, node)
-                    break
-                    -- query : { "match", "node_name", "test" } all node_name nodes that match "test" content
-                    -- elseif query[1] == "match" then
-                    -- TODO Match node content
-                    -- query : { "all", "node_name" } all child nodes that match node_name
-                elseif query[1] == "all" then
-                    table.insert(res, node)
-                end
-            end
-
-            if opts.recursive then
-                local found = module.private.matching_query(node, query, { recursive = true })
-                vim.list_extend(res, found)
-            end
-        end
-
-        return res
-    end,
-
-    --- Checks if `parent` node matches a `where` query and returns a predicate accordingly
-    ---@param parent userdata
-    ---@param where table
-    ---@param opts table
-    ---   - opts.bufnr (number):    used in where[1] == "child_content" (in order to get the node's content)
-    ---@return boolean
-    predicate_where = function(parent, where, opts)
-        opts = opts or {}
-
-        if not where or #where == 0 then
-            return true
-        end
-
-        -- Where statements requesting children nodes from parent node
-        for node in parent:iter_children() do
-            if where[1] == "child_exists" then
-                if node:type() == where[2] then
-                    return true
-                end
-            end
-
-            if where[1] == "child_content" then
-                local temp_buf = module.public.get_temp_buf(opts.bufnr)
-                if
-                    node:type() == where[2]
-                    and vim.split(vim.treesitter.query.get_node_text(node, temp_buf), "\n")[1] == where[3]
-                then
-                    return true
-                end
-            end
-        end
-
-        return false
     end,
 }
 

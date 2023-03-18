@@ -23,7 +23,7 @@ local neorg = require("neorg.core")
 local modules = require("neorg.modules")
 local module = modules.create("core.integrations.nvim-cmp")
 
-module.private = {
+local this = {
     source = {},
     cmp = {},
     completions = {},
@@ -37,27 +37,27 @@ module.load = function()
         return
     end
 
-    module.private.cmp = cmp
+    this.cmp = cmp
 end
 
 ---@class core.integrations.nvim-cmp
 module.public = {
     create_source = function()
-        module.private.completion_item_mapping = {
-            Directive = module.private.cmp.lsp.CompletionItemKind.Keyword,
-            Tag = module.private.cmp.lsp.CompletionItemKind.Keyword,
-            Language = module.private.cmp.lsp.CompletionItemKind.Property,
-            TODO = module.private.cmp.lsp.CompletionItemKind.Event,
-            Property = module.private.cmp.lsp.CompletionItemKind.Property,
-            Format = module.private.cmp.lsp.CompletionItemKind.Property,
-            Embed = module.private.cmp.lsp.CompletionItemKind.Property,
+        this.completion_item_mapping = {
+            Directive = this.cmp.lsp.CompletionItemKind.Keyword,
+            Tag = this.cmp.lsp.CompletionItemKind.Keyword,
+            Language = this.cmp.lsp.CompletionItemKind.Property,
+            TODO = this.cmp.lsp.CompletionItemKind.Event,
+            Property = this.cmp.lsp.CompletionItemKind.Property,
+            Format = this.cmp.lsp.CompletionItemKind.Property,
+            Embed = this.cmp.lsp.CompletionItemKind.Property,
         }
 
-        module.private.source.new = function()
-            return setmetatable({}, { __index = module.private.source })
+        this.source.new = function()
+            return setmetatable({}, { __index = this.source })
         end
 
-        function module.private.source.complete(_, request, callback)
+        function this.source.complete(_, request, callback)
             local abstracted_context = module.public.create_abstracted_context(request)
 
             local completion_cache = module.public.invoke_completion_engine(abstracted_context)
@@ -78,18 +78,18 @@ module.public = {
                 completions[index] = {
                     word = word,
                     label = label,
-                    kind = module.private.completion_item_mapping[completion_cache.options.type],
+                    kind = this.completion_item_mapping[completion_cache.options.type],
                 }
             end
 
             callback(completions)
         end
 
-        function module.private.source:get_trigger_characters()
+        function this.source:get_trigger_characters()
             return { "@", "-", "(", " ", "." }
         end
 
-        module.private.cmp.register_source("neorg", module.private.source)
+        this.cmp.register_source("neorg", this.source)
     end,
 
     create_abstracted_context = function(request)

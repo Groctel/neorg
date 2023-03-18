@@ -88,7 +88,7 @@ end
 
 module.config = require_relative(..., "config")
 
-module.private = {
+local this = {
     current_workspace = { "default", vim.fn.getcwd() },
 }
 
@@ -110,7 +110,7 @@ module.public = {
 
     --- Returns a table in the format { "workspace_name", "path" }
     get_current_workspace = function()
-        return module.private.current_workspace
+        return this.current_workspace
     end,
 
     --- Sets the workspace to the one specified (if it exists) and broadcasts the workspace_changed event
@@ -132,10 +132,10 @@ module.public = {
         vim.loop.fs_mkdir(workspace, 16877)
 
         -- Cache the current workspace
-        local current_ws = vim.deepcopy(module.private.current_workspace)
+        local current_ws = vim.deepcopy(this.current_workspace)
 
         -- Set the current workspace to the new workspace object we constructed
-        module.private.current_workspace = new_workspace
+        this.current_workspace = new_workspace
 
         if ws_name ~= "default" then
             module.required["core.storage"].store("last_workspace", ws_name)

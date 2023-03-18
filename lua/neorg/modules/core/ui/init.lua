@@ -10,7 +10,7 @@ local neorg = require("neorg.core")
 local modules = require("neorg.modules")
 local module = modules.create("core.ui")
 
-module.private = {
+local this = {
     windows = {},
     namespace = vim.api.nvim_create_namespace("core.ui"),
 }
@@ -82,15 +82,15 @@ module.public = {
         -- Get the name of the buffer with the specified ID
         local name = vim.api.nvim_buf_get_name(buf)
 
-        if module.private.windows[name] ~= nil then
+        if this.windows[name] ~= nil then
             -- Attempt to force close both the window and the buffer
-            vim.api.nvim_win_close(module.private.windows[name], true)
+            vim.api.nvim_win_close(this.windows[name], true)
         end
 
         vim.api.nvim_buf_delete(buf, { force = true })
 
         -- Reset the window ID to nil so it can be reused again
-        module.private.windows[name] = nil
+        this.windows[name] = nil
     end,
 
     --- Applies a set of options to a buffer

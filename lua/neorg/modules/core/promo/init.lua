@@ -2,32 +2,8 @@ local neorg = require("neorg.core")
 local modules = require("neorg.modules")
 local module = modules.create("core.promo")
 
-module.setup = function()
-    return {
-        success = true,
-        requires = {
-            "core.integrations.treesitter",
-            "core.keybinds",
-        },
-    }
-end
 
-module.load = function()
-    module.required["core.keybinds"].register_keybinds(
-        module.name,
-        (function()
-            local keys = vim.tbl_keys(module.events.subscribed["core.keybinds"])
-
-            for i, key in ipairs(keys) do
-                keys[i] = key:sub(module.name:len() + 2)
-            end
-
-            return keys
-        end)()
-    )
-end
-
-module.private = {
+local this = {
     types = {
         heading = {
             pattern = "^heading(%d)$",
@@ -57,9 +33,35 @@ module.private = {
     },
 }
 
+
+module.setup = function()
+    return {
+        success = true,
+        requires = {
+            "core.integrations.treesitter",
+            "core.keybinds",
+        },
+    }
+end
+
+module.load = function()
+    module.required["core.keybinds"].register_keybinds(
+        module.name,
+        (function()
+            local keys = vim.tbl_keys(module.events.subscribed["core.keybinds"])
+
+            for i, key in ipairs(keys) do
+                keys[i] = key:sub(module.name:len() + 2)
+            end
+
+            return keys
+        end)()
+    )
+end
+
 module.public = {
     get_promotable_node_prefix = function(node)
-        for _, data in pairs(module.private.types) do
+        for _, data in pairs(this.types) do
             if node:type():match(data.pattern) then
                 return data.prefix
             end
@@ -70,7 +72,7 @@ module.public = {
         local node = module.required["core.integrations.treesitter"].get_first_node_on_line(
             buffer,
             row,
-            module.private.ignore_types
+            this.ignore_types
         )
 
         if not node or node:has_error() then

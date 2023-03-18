@@ -2,9 +2,14 @@
     File for creating text popups for the user.
 --]]
 
-local neorg = require("neorg.core")
 local modules = require("neorg.modules")
 local module = modules.extend("core.ui.text_popup")
+
+
+local this = {
+    windows = {}
+}
+
 
 ---@class core.ui
 module.public = {
@@ -16,7 +21,7 @@ module.public = {
     ---@param config table #A config like you would pass into nvim_open_win()
     create_prompt = function(name, input_text, callback, modifiers, config)
         -- If the window already exists then don't create another one
-        if module.private.windows[name] then
+        if this.windows[name] then
             return
         end
 
@@ -75,7 +80,7 @@ module.public = {
         vim.api.nvim_feedkeys("i", "t", false)
 
         -- Create the floating popup window with the prompt buffer
-        module.private.windows[name] = vim.api.nvim_open_win(buf, true, window_config)
+        this.windows[name] = vim.api.nvim_open_win(buf, true, window_config)
     end,
 }
 

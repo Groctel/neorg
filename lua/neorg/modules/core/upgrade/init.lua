@@ -3,6 +3,36 @@ local modules = require("neorg.modules")
 local module = modules.create("core.upgrade")
 local require_relative = require("neorg.utils").require_relative
 
+local this = {}
+
+function this.neorg_parser_call(name, callback)
+    local parser_configs = require("nvim-treesitter.parsers").get_parser_configs()
+
+    parser_configs.norg_old = vim.tbl_deep_extend("force", parser_configs[name], {
+        install_info = {
+            branch = "main",
+            revision = "8ad20059c6f128861c4506fff866150ffee1d6f4",
+        },
+    })
+
+    vim.treesitter.require_language("norg_old", nil, true, "norg")
+    if
+        not vim._ts_has_language("norg_old") and not vim.deep_equal(parser_configs.norg_old, parser_configs[name])
+    then
+        local ok, install = pcall(require, "nvim-treesitter.install")
+
+        if not ok then
+            neorg.log.error("Unable to upgrade document! The old parser version failed to install, perhaps try again?")
+            neorg.log.error("Upgrading aborted.")
+            return
+        end
+
+        install.commands.TSInstallSync["run!"]("norg_old")
+    end
+
+    callback()
+end
+
 module.setup = function()
     return {
         requires = {
@@ -150,39 +180,10 @@ module.public = {
     end,
 }
 
-module.private = {
-    neorg_parser_call = function(name, callback)
-        local parser_configs = require("nvim-treesitter.parsers").get_parser_configs()
-
-        parser_configs.norg_old = vim.tbl_deep_extend("force", parser_configs[name], {
-            install_info = {
-                branch = "main",
-                revision = "8ad20059c6f128861c4506fff866150ffee1d6f4",
-            },
-        })
-
-        vim.treesitter.require_language("norg_old", nil, true, "norg")
-        if
-            not vim._ts_has_language("norg_old") and not vim.deep_equal(parser_configs.norg_old, parser_configs[name])
-        then
-            local ok, install = pcall(require, "nvim-treesitter.install")
-
-            if not ok then
-                neorg.log.error("Unable to upgrade document! The old parser version failed to install, perhaps try again?")
-                neorg.log.error("Upgrading aborted.")
-                return
-            end
-
-            install.commands.TSInstallSync["run!"]("norg_old")
-        end
-
-        callback()
-    end,
-}
 
 module.on_event = function(event)
     if event.name == "core.upgrade.current-file" then
-        module.private.neorg_parser_call("norg", function()
+        this.neorg_parser_call("norg", function()
             local path = vim.api.nvim_buf_call(event.buffer, function()
                 return vim.fn.expand("%")
             end)
@@ -230,7 +231,7 @@ module.on_event = function(event)
             end)
         end)
     elseif event.name == "core.upgrade.current-directory" then
-        module.private.neorg_parser_call("norg", function()
+        this.neorg_parser_call("norg", function()
             local path = vim.fn.getcwd(event.window)
 
             do

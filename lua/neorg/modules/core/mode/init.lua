@@ -24,7 +24,7 @@ local log = neorg.log
 module.config = require_relative(..., "config")
 
 
-module.private = {
+local this = {
     -- All the currently defined modes
     modes = {
         "norg",
@@ -54,7 +54,7 @@ module.public = {
         end
 
         -- Add the new mode to the list of known modes
-        table.insert(module.private.modes, mode_name)
+        table.insert(this.modes, mode_name)
 
         -- Broadcast the mode_created event
         neorg.events.new(
@@ -116,7 +116,7 @@ module.public = {
     end,
 
     get_modes = function()
-        return module.private.modes
+        return this.modes
     end,
 
     version = "0.0.9",

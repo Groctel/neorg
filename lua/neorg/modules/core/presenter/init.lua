@@ -11,6 +11,15 @@ local module = modules.create("core.presenter")
 local api = vim.api
 local require_relative = require("neorg.utils").require_relative
 
+
+local this = {
+    data = {},
+    nodes = {},
+    buf = nil,
+    current_page = 1,
+}
+
+
 module.setup = function()
     return {
         success = true,
@@ -61,18 +70,12 @@ end
 
 module.config = require_relative(..., "config")
 
-module.private = {
-    data = {},
-    nodes = {},
-    buf = nil,
-    current_page = 1,
-}
 
 ---@class core.presenter
 module.public = {
     version = "0.0.8",
     present = function()
-        if module.private.buf then
+        if this.buf then
             neorg.log.warn("Presentation already started")
             return
         end
@@ -104,10 +107,10 @@ module.public = {
             return
         end
 
-        module.private.nodes = results
+        this.nodes = results
         results = queries.extract_nodes(results, { all_lines = true })
 
-        results = module.private.remove_blanklines(results)
+        results = this.remove_blanklines(results)
 
         -- This is a temporary fix because querying the heading1 nodes seems to query the next heading1 node too !
         for _, res in pairs(results) do
@@ -139,51 +142,51 @@ module.public = {
         api.nvim_buf_set_option(buffer, "modifiable", false)
 
         module.required["core.mode"].set_mode("presenter")
-        module.private.buf = buffer
-        module.private.data = results
+        this.buf = buffer
+        this.data = results
     end,
 
     next_page = function()
-        if vim.tbl_isempty(module.private.data) or not module.private.buf then
+        if vim.tbl_isempty(this.data) or not this.buf then
             return
         end
 
-        if vim.tbl_count(module.private.data) == module.private.current_page then
-            api.nvim_buf_set_option(module.private.buf, "modifiable", true)
-            api.nvim_buf_set_lines(module.private.buf, 0, -1, false, { "Press `next` again to close..." })
-            api.nvim_buf_set_option(module.private.buf, "modifiable", false)
-            module.private.current_page = module.private.current_page + 1
+        if vim.tbl_count(this.data) == this.current_page then
+            api.nvim_buf_set_option(this.buf, "modifiable", true)
+            api.nvim_buf_set_lines(this.buf, 0, -1, false, { "Press `next` again to close..." })
+            api.nvim_buf_set_option(this.buf, "modifiable", false)
+            this.current_page = this.current_page + 1
             return
-        elseif vim.tbl_count(module.private.data) < module.private.current_page then
+        elseif vim.tbl_count(this.data) < this.current_page then
             module.public.close()
             return
         end
 
-        module.private.current_page = module.private.current_page + 1
+        this.current_page = this.current_page + 1
 
-        api.nvim_buf_set_option(module.private.buf, "modifiable", true)
-        api.nvim_buf_set_lines(module.private.buf, 0, -1, false, module.private.data[module.private.current_page])
-        api.nvim_buf_set_option(module.private.buf, "modifiable", false)
+        api.nvim_buf_set_option(this.buf, "modifiable", true)
+        api.nvim_buf_set_lines(this.buf, 0, -1, false, this.data[this.current_page])
+        api.nvim_buf_set_option(this.buf, "modifiable", false)
     end,
 
     previous_page = function()
-        if vim.tbl_isempty(module.private.data) or not module.private.buf then
+        if vim.tbl_isempty(this.data) or not this.buf then
             return
         end
 
-        if module.private.current_page == 1 then
+        if this.current_page == 1 then
             return
         end
 
-        module.private.current_page = module.private.current_page - 1
+        this.current_page = this.current_page - 1
 
-        api.nvim_buf_set_option(module.private.buf, "modifiable", true)
-        api.nvim_buf_set_lines(module.private.buf, 0, -1, false, module.private.data[module.private.current_page])
-        api.nvim_buf_set_option(module.private.buf, "modifiable", false)
+        api.nvim_buf_set_option(this.buf, "modifiable", true)
+        api.nvim_buf_set_lines(this.buf, 0, -1, false, this.data[this.current_page])
+        api.nvim_buf_set_option(this.buf, "modifiable", false)
     end,
 
     close = function()
-        if not module.private.buf then
+        if not this.buf then
             return
         end
 
@@ -201,15 +204,15 @@ module.public = {
             modules.get_module("core.integrations.zen_mode").toggle()
         end
 
-        api.nvim_buf_delete(module.private.buf, {})
-        module.private.data = {}
-        module.private.current_page = 1
-        module.private.buf = nil
-        module.private.nodes = {}
+        api.nvim_buf_delete(this.buf, {})
+        this.data = {}
+        this.current_page = 1
+        this.buf = nil
+        this.nodes = {}
     end,
 }
 
-module.private = {
+this = {
     remove_blanklines = function(t)
         local copy = t
         for k, _t in pairs(copy) do

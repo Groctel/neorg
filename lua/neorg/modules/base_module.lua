@@ -13,9 +13,6 @@ local base = {
     -- The path of the module, can be used in require() statements
     path = "neorg.modules.core.default.module",
 
-    -- A convenience table to place all of your private variables that you don't want to expose here.
-    private = {},
-
     -- Every module can expose any set of information it sees fit through the public field
     -- All functions and variables declared in this table will be visible to any other module loaded
     public = {
@@ -25,8 +22,7 @@ local base = {
         version = neorg.configuration.version,
     },
 
-    -- Configuration for the module. Options and groups preceded by "_" are
-    -- private and should be type hinted as such.
+    -- Configuration for the module.
     config = { --[[
         config_option = false,
         option_group = { sub_option = true }

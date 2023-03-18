@@ -14,33 +14,8 @@ local modules = require("neorg.modules")
 local module = modules.create("core.syntax")
 local require_relative = require("neorg.utils").require_relative
 
-local function schedule(func)
-    vim.schedule(function()
-        if
-            module.private.disable_deferred_updates
-            or (
-                (module.private.debounce_counters[vim.api.nvim_win_get_cursor(0)[1] + 1] or 0)
-                >= module.config.performance.max_debounce
-            )
-        then
-            return
-        end
 
-        func()
-    end)
-end
-
-module.setup = function()
-    return {
-        success = true,
-        requires = {
-            "core.autocommands",
-            "core.integrations.treesitter",
-        },
-    }
-end
-
-module.private = {
+local this = {
 
     largest_change_start = -1,
     largest_change_end = -1,
@@ -69,17 +44,44 @@ module.private = {
     available_languages = {},
 }
 
+
+local function schedule(func)
+    vim.schedule(function()
+        if
+            this.disable_deferred_updates
+            or (
+                (this.debounce_counters[vim.api.nvim_win_get_cursor(0)[1] + 1] or 0)
+                >= module.config.performance.max_debounce
+            )
+        then
+            return
+        end
+
+        func()
+    end)
+end
+
+module.setup = function()
+    return {
+        success = true,
+        requires = {
+            "core.autocommands",
+            "core.integrations.treesitter",
+        },
+    }
+end
+
 module.public = {
 
-    -- fills module.private.loaded_code_blocks with the list of active code blocks in the buffer
+    -- fills this.loaded_code_blocks with the list of active code blocks in the buffer
     -- stores globally apparently
     check_code_block_type = function(buf, reload, from, to)
         -- parse the current buffer, and clear out the buffer's loaded code blocks if needed
         local current_buf = vim.api.nvim_buf_get_name(buf)
 
         -- load nil table with empty values
-        if module.private.code_block_table[current_buf] == nil then
-            module.private.code_block_table[current_buf] = { loaded_regex = {} }
+        if this.code_block_table[current_buf] == nil then
+            this.code_block_table[current_buf] = { loaded_regex = {} }
         end
 
         -- recreate table for buffer on buffer change
@@ -90,14 +92,14 @@ module.public = {
             like reentering the buffer, this will get cleared to recreate what languages
             are loaded. then another function will handle unloading syntax files on next load
         --]]
-        for key in pairs(module.private.code_block_table) do
+        for key in pairs(this.code_block_table) do
             if current_buf == key and reload == true then
-                for k, _ in pairs(module.private.code_block_table[current_buf].loaded_regex) do
+                for k, _ in pairs(this.code_block_table[current_buf].loaded_regex) do
                     module.public.remove_syntax(
                         string.format("textGroup%s", string.upper(k)),
                         string.format("textSnip%s", string.upper(k))
                     )
-                    module.private.code_block_table[current_buf].loaded_regex[k] = nil
+                    this.code_block_table[current_buf].loaded_regex[k] = nil
                 end
             end
         end
@@ -137,7 +139,7 @@ module.public = {
 
                     -- make sure that the language is actually valid
                     local type_func = function()
-                        return module.private.available_languages[regex_lang].type
+                        return this.available_languages[regex_lang].type
                     end
                     local ok, type = pcall(type_func)
 
@@ -147,22 +149,22 @@ module.public = {
 
                     -- add language to table
                     -- if type is empty it means this language has never been found
-                    if module.private.code_block_table[current_buf].loaded_regex[regex_lang] == nil then
-                        module.private.code_block_table[current_buf].loaded_regex[regex_lang] = {
+                    if this.code_block_table[current_buf].loaded_regex[regex_lang] == nil then
+                        this.code_block_table[current_buf].loaded_regex[regex_lang] = {
                             type = type,
                             range = {},
                             cluster = "",
                         }
                     end
                     -- else just do what we need to do
-                    module.private.code_block_table[current_buf].loaded_regex[regex_lang].range[start_row] = end_row
+                    this.code_block_table[current_buf].loaded_regex[regex_lang].range[start_row] = end_row
                     table.insert(compare_table, regex_lang)
                 end
             end
 
             -- compare loaded languages to see if the file actually has the code blocks
             if from == nil then
-                for lang in pairs(module.private.code_block_table[current_buf].loaded_regex) do
+                for lang in pairs(this.code_block_table[current_buf].loaded_regex) do
                     local found_lang = false
                     for _, matched in pairs(compare_table) do
                         if matched == lang then
@@ -174,7 +176,7 @@ module.public = {
                     -- remove the syntax include and region
                     if found_lang == false then
                         -- delete loaded lang from the table
-                        module.private.code_block_table[current_buf].loaded_regex[lang] = nil
+                        this.code_block_table[current_buf].loaded_regex[lang] = nil
                         module.public.remove_syntax(
                             string.format("textGroup%s", string.upper(lang)),
                             string.format("textSnip%s", string.upper(lang))
@@ -191,10 +193,10 @@ module.public = {
         -- schedule(function()
         local current_buf = vim.api.nvim_buf_get_name(buf)
         -- only parse from the loaded_code_blocks module, not from the file directly
-        if module.private.code_block_table[current_buf] == nil then
+        if this.code_block_table[current_buf] == nil then
             return
         end
-        local lang_table = module.private.code_block_table[current_buf].loaded_regex
+        local lang_table = this.code_block_table[current_buf].loaded_regex
         for lang_name, curr_table in pairs(lang_table) do
             if curr_table.type == "syntax" then
                 -- NOTE: the regex fallback code was originally mostly adapted from Vimwiki
@@ -206,7 +208,7 @@ module.public = {
                 local has_syntax = string.format("syntax list @%s", group)
 
                 -- sync groups when needed
-                if ignore_buf == false and vim.api.nvim_buf_get_name(buf) == module.private.last_buffer then
+                if ignore_buf == false and vim.api.nvim_buf_get_name(buf) == this.last_buffer then
                     module.public.sync_regex_code_blocks(buf, lang_name, from, to)
                 end
 
@@ -258,7 +260,7 @@ module.public = {
 
                     -- include the cluster that will put inside the region
                     -- source using the available languages
-                    for syntax, table in pairs(module.private.available_languages) do
+                    for syntax, table in pairs(this.available_languages) do
                         if table.type == "syntax" then
                             if lang_name == syntax then
                                 if empty_result == 0 then
@@ -284,16 +286,16 @@ module.public = {
                                         actual_cluster = match
                                     end
                                     if actual_cluster ~= nil then
-                                        module.private.code_block_table[current_buf].loaded_regex[lang_name].cluster =
+                                        this.code_block_table[current_buf].loaded_regex[lang_name].cluster =
                                             actual_cluster
                                     end
                                 elseif
-                                    module.private.code_block_table[current_buf].loaded_regex[lang_name].cluster ~= nil
+                                    this.code_block_table[current_buf].loaded_regex[lang_name].cluster ~= nil
                                 then
                                     local command = string.format(
                                         "silent! syntax cluster %s add=%s",
                                         group,
-                                        module.private.code_block_table[current_buf].loaded_regex[lang_name].cluster
+                                        this.code_block_table[current_buf].loaded_regex[lang_name].cluster
                                     )
                                     vim.cmd(command)
                                 end
@@ -348,7 +350,7 @@ module.public = {
                 end
 
                 vim.b.current_syntax = ""
-                module.private.last_buffer = vim.api.nvim_buf_get_name(buf)
+                this.last_buffer = vim.api.nvim_buf_get_name(buf)
             end
         end
         -- end)
@@ -369,10 +371,10 @@ module.public = {
     sync_regex_code_blocks = function(buf, regex, from, to)
         local current_buf = vim.api.nvim_buf_get_name(buf)
         -- only parse from the loaded_code_blocks module, not from the file directly
-        if module.private.code_block_table[current_buf] == nil then
+        if this.code_block_table[current_buf] == nil then
             return
         end
-        local lang_table = module.private.code_block_table[current_buf].loaded_regex
+        local lang_table = this.code_block_table[current_buf].loaded_regex
         for lang_name, curr_table in pairs(lang_table) do
             -- if we got passed a regex, then we need to only parse the right one
             if regex ~= nil then
@@ -451,15 +453,15 @@ module.load = function()
 
     -- Load available regex languages
     -- get the available regex files for the current session
-    module.private.available_languages = neorg.utils.get_language_list(false)
+    this.available_languages = neorg.utils.get_language_list(false)
 end
 
 module.on_event = function(event)
-    module.private.debounce_counters[event.cursor_position[1] + 1] = module.private.debounce_counters[event.cursor_position[1] + 1]
+    this.debounce_counters[event.cursor_position[1] + 1] = this.debounce_counters[event.cursor_position[1] + 1]
         or 0
 
     local function should_debounce()
-        return module.private.debounce_counters[event.cursor_position[1] + 1]
+        return this.debounce_counters[event.cursor_position[1] + 1]
             >= module.config.performance.max_debounce
     end
 
@@ -534,12 +536,12 @@ module.on_event = function(event)
                     return
                 end
 
-                module.private.last_change.active = true
+                this.last_change.active = true
 
                 local mode = vim.api.nvim_get_mode().mode
 
                 if mode ~= "i" then
-                    module.private.debounce_counters[event.cursor_position[1] + 1] = module.private.debounce_counters[event.cursor_position[1] + 1]
+                    this.debounce_counters[event.cursor_position[1] + 1] = this.debounce_counters[event.cursor_position[1] + 1]
                         + 1
 
                     schedule(function()
@@ -557,23 +559,23 @@ module.on_event = function(event)
                         line_count = new_line_count
 
                         vim.schedule(function()
-                            module.private.debounce_counters[event.cursor_position[1] + 1] = module.private.debounce_counters[event.cursor_position[1] + 1]
+                            this.debounce_counters[event.cursor_position[1] + 1] = this.debounce_counters[event.cursor_position[1] + 1]
                                 - 1
                         end)
                     end)
                 else
-                    if module.private.largest_change_start == -1 then
-                        module.private.largest_change_start = start
+                    if this.largest_change_start == -1 then
+                        this.largest_change_start = start
                     end
 
-                    if module.private.largest_change_end == -1 then
-                        module.private.largest_change_end = _end
+                    if this.largest_change_end == -1 then
+                        this.largest_change_end = _end
                     end
 
-                    module.private.largest_change_start = start < module.private.largest_change_start and start
-                        or module.private.largest_change_start
-                    module.private.largest_change_end = _end > module.private.largest_change_end and _end
-                        or module.private.largest_change_end
+                    this.largest_change_start = start < this.largest_change_start and start
+                        or this.largest_change_start
+                    this.largest_change_end = _end > this.largest_change_end and _end
+                        or this.largest_change_end
                 end
             end,
         })
@@ -583,46 +585,46 @@ module.on_event = function(event)
         end
 
         schedule(function()
-            if not module.private.last_change.active or module.private.largest_change_end == -1 then
+            if not this.last_change.active or this.largest_change_end == -1 then
                 module.public.check_code_block_type(
                     event.buffer,
                     false
-                    -- module.private.last_change.line,
-                    -- module.private.last_change.line + 1
+                    -- this.last_change.line,
+                    -- this.last_change.line + 1
                 )
                 module.public.trigger_highlight_regex_code_block(
                     event.buffer,
                     false,
                     true,
-                    module.private.last_change.line,
-                    module.private.last_change.line + 1
+                    this.last_change.line,
+                    this.last_change.line + 1
                 )
             else
                 module.public.check_code_block_type(
                     event.buffer,
                     false,
-                    module.private.last_change.line,
-                    module.private.last_change.line + 1
+                    this.last_change.line,
+                    this.last_change.line + 1
                 )
                 module.public.trigger_highlight_regex_code_block(
                     event.buffer,
                     false,
                     true,
-                    module.private.largest_change_start,
-                    module.private.largest_change_end
+                    this.largest_change_start,
+                    this.largest_change_end
                 )
             end
 
-            module.private.largest_change_start, module.private.largest_change_end = -1, -1
+            this.largest_change_start, this.largest_change_end = -1, -1
         end)
     elseif event.name == "core.autocommands.events.vimleavepre" then
-        module.private.disable_deferred_updates = true
+        this.disable_deferred_updates = true
         -- this autocmd is used to fix hi link syntax languages
         -- TEMP(vhyrro): Temporarily removed for testing - executes code twice when it should not.
         -- elseif event.name == "core.autocommands.events.textchanged" then
-        -- module.private.trigger_highlight_regex_code_block(event.buffer, false, true)
+        -- this.trigger_highlight_regex_code_block(event.buffer, false, true)
         -- elseif event.name == "core.autocommands.events.textchangedi" then
-        --     module.private.trigger_highlight_regex_code_block(event.buffer, false, true)
+        --     this.trigger_highlight_regex_code_block(event.buffer, false, true)
     elseif event.name == "core.autocommands.events.colorscheme" then
         module.public.trigger_highlight_regex_code_block(event.buffer, true, false)
     end

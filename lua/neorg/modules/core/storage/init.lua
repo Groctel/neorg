@@ -10,6 +10,11 @@ local modules = require("neorg.modules")
 local module = modules.create("core.storage")
 local require_relative = require("neorg.utils").require_relative
 
+local this = {
+    data = {},
+}
+
+
 module.setup = function()
     return {
         requires = {
@@ -20,9 +25,6 @@ end
 
 module.config = require_relative(..., "config")
 
-module.private = {
-    data = {},
-}
 
 ---@class core.storage
 module.public = {
@@ -38,27 +40,27 @@ module.public = {
 
         io.close(file)
 
-        module.private.data = vim.mpack.decode and vim.mpack.decode(content) or vim.mpack.unpack(content)
+        this.data = vim.mpack.decode and vim.mpack.decode(content) or vim.mpack.unpack(content)
     end,
 
     --- Stores a key-value pair in the storage
     ---@param key string #The key to index in the storage
     ---@param data any #The data to store at the specific key
     store = function(key, data)
-        module.private.data[key] = data
+        this.data[key] = data
     end,
 
     --- Removes a key from storage
     ---@param key string #The name of the key to remove
     remove = function(key)
-        module.private.data[key] = nil
+        this.data[key] = nil
     end,
 
     --- Retrieves a key from the storage
     ---@param key string #The name of the key to index
     ---@return any|table #The data present at the key, or an empty table
     retrieve = function(key)
-        return module.private.data[key] or {}
+        return this.data[key] or {}
     end,
 
     --- Flushes the contents in memory to the location specified in the `path` configuration option.
@@ -69,7 +71,7 @@ module.public = {
             return
         end
 
-        file:write(vim.mpack.encode and vim.mpack.encode(module.private.data) or vim.mpack.pack(module.private.data))
+        file:write(vim.mpack.encode and vim.mpack.encode(this.data) or vim.mpack.pack(this.data))
 
         io.close(file)
     end,

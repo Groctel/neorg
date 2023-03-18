@@ -11,8 +11,8 @@ a thing, punctuation can be added (without removing the whitespace
 between the icon and actual text) like so:
 
 ```lua
-icon = module.private.ordered_concealing.punctuation.dot(
-    module.private.ordered_concealing.icon_renderer.numeric
+icon = this.ordered_concealing.punctuation.dot(
+    this.ordered_concealing.icon_renderer.numeric
 )
 ```
 
@@ -21,9 +21,9 @@ Note: this will produce icons like `1.`, `2.`, etc.
 You can even chain multiple punctuation wrappers like so:
 
 ```lua
-icon = module.private.ordered_concealing.punctuation.parenthesis(
-    module.private.ordered_concealing.punctuation.dot(
-        module.private.ordered_concealing.icon_renderer.numeric
+icon = this.ordered_concealing.punctuation.parenthesis(
+    this.ordered_concealing.punctuation.dot(
+        this.ordered_concealing.icon_renderer.numeric
     )
 )
 ```
@@ -35,14 +35,37 @@ local neorg = require("neorg.core")
 local modules = require("neorg.modules")
 local module = modules.create("core.norg.concealer")
 
+
+local this = {
+    icon_namespace = vim.api.nvim_create_namespace("neorg-conceals"),
+    code_block_namespace = vim.api.nvim_create_namespace("neorg-code-blocks"),
+    icons = {},
+
+    largest_change_start = -1,
+    largest_change_end = -1,
+
+    last_change = {
+        active = false,
+        line = 0,
+    },
+
+    disable_deferred_updates = false,
+    debounce_counters = {},
+
+    enabled = true,
+
+    attach_uid = 0,
+}
+
+
 --- Schedule a function if there is no debounce active or if deferred updates have been disabled
 ---@param func function #Any function to execute
 local function schedule(func)
     vim.schedule(function()
         if
-            module.private.disable_deferred_updates
+            this.disable_deferred_updates
             or (
-                (module.private.debounce_counters[vim.api.nvim_win_get_cursor(0)[1] + 1] or 0)
+                (this.debounce_counters[vim.api.nvim_win_get_cursor(0)[1] + 1] or 0)
                 >= module.config.performance.max_debounce
             )
         then
@@ -68,26 +91,6 @@ module.setup = function()
     }
 end
 
-module.private = {
-    icon_namespace = vim.api.nvim_create_namespace("neorg-conceals"),
-    code_block_namespace = vim.api.nvim_create_namespace("neorg-code-blocks"),
-    icons = {},
-
-    largest_change_start = -1,
-    largest_change_end = -1,
-
-    last_change = {
-        active = false,
-        line = 0,
-    },
-
-    disable_deferred_updates = false,
-    debounce_counters = {},
-
-    enabled = true,
-
-    attach_uid = 0,
-}
 
 ---@class core.norg.concealer
 module.public = {
@@ -254,7 +257,7 @@ module.public = {
                         old_extmarks,
                         module.public.get_old_extmarks(
                             buf,
-                            module.private.code_block_namespace,
+                            this.code_block_namespace,
                             range.row_start,
                             range.row_end
                         )
@@ -265,7 +268,7 @@ module.public = {
                             pcall(
                                 vim.api.nvim_buf_set_extmark,
                                 buf,
-                                module.private.code_block_namespace,
+                                this.code_block_namespace,
                                 range.row_start,
                                 0,
                                 {
@@ -281,7 +284,7 @@ module.public = {
                             pcall(
                                 vim.api.nvim_buf_set_extmark,
                                 buf,
-                                module.private.code_block_namespace,
+                                this.code_block_namespace,
                                 range.row_end,
                                 0,
                                 {
@@ -335,7 +338,7 @@ module.public = {
                                     buf,
                                     nil,
                                     "@neorg.tags.ranged_verbatim.code_block",
-                                    module.private.code_block_namespace,
+                                    this.code_block_namespace,
                                     linenr,
                                     linenr + 1,
                                     math.max(range.column_start - module.config.dim_code_blocks.padding.left, 0),
@@ -362,7 +365,7 @@ module.public = {
                                             },
                                         },
                                         nil,
-                                        module.private.code_block_namespace,
+                                        this.code_block_namespace,
                                         linenr,
                                         linenr + 1,
                                         line_width,
@@ -414,7 +417,7 @@ module.public = {
                                         ),
                                     },
                                     "@neorg.tags.ranged_verbatim.code_block",
-                                    module.private.code_block_namespace,
+                                    this.code_block_namespace,
                                     linenr,
                                     linenr + 1,
                                     0,
@@ -433,7 +436,7 @@ module.public = {
 
             schedule(function()
                 neorg.lib.map(old_extmarks, function(_, id)
-                    vim.api.nvim_buf_del_extmark(buf, module.private.code_block_namespace, id)
+                    vim.api.nvim_buf_del_extmark(buf, this.code_block_namespace, id)
                 end)
             end)
         end
@@ -788,7 +791,7 @@ module.public = {
 
                 local icon_extmarks = vim.api.nvim_buf_get_extmarks(
                     0,
-                    module.private.icon_namespace,
+                    this.icon_namespace,
                     { foldstart - 1, 0 },
                     { foldstart - 1, line_length },
                     {
@@ -814,9 +817,9 @@ module.public = {
     end,
 
     toggle_concealer = function()
-        module.private.enabled = not module.private.enabled
+        this.enabled = not this.enabled
 
-        if module.private.enabled then
+        if this.enabled then
             local concealer = modules.loaded_modules["core.norg.concealer"]
             if concealer then
                 neorg.events.new(
@@ -830,7 +833,7 @@ module.public = {
                 "icon_namespace",
                 "code_block_namespace",
             }) do
-                vim.api.nvim_buf_clear_namespace(0, module.private[namespace], 0, -1)
+                vim.api.nvim_buf_clear_namespace(0, this[namespace], 0, -1)
             end
         end
     end,
@@ -1367,8 +1370,8 @@ module.load = function()
         return result
     end
 
-    -- Set the module.private.icons variable to the values of the enabled icons
-    module.private.icons = vim.tbl_values(get_enabled_icons(module.config.icons))
+    -- Set the this.icons variable to the values of the enabled icons
+    this.icons = vim.tbl_values(get_enabled_icons(module.config.icons))
 
     -- Enable the required autocommands (these will be used to determine when to update conceals in the buffer)
     module.required["core.autocommands"].enable_autocommand("BufEnter")
@@ -1399,8 +1402,8 @@ module.load = function()
                 module.public.trigger_icons(
                     current_buffer,
                     has_conceal,
-                    module.private.icons,
-                    module.private.icon_namespace
+                    this.icons,
+                    this.icon_namespace
                 )
 
                 if module.config.dim_code_blocks.conceal and module.config.dim_code_blocks.adaptive then
@@ -1416,15 +1419,15 @@ module.on_event = function(event)
         module.public.toggle_concealer()
     end
 
-    if not module.private.enabled then
+    if not this.enabled then
         return
     end
 
-    module.private.debounce_counters[event.cursor_position[1] + 1] = module.private.debounce_counters[event.cursor_position[1] + 1]
+    this.debounce_counters[event.cursor_position[1] + 1] = this.debounce_counters[event.cursor_position[1] + 1]
         or 0
 
     local function should_debounce()
-        return module.private.debounce_counters[event.cursor_position[1] + 1]
+        return this.debounce_counters[event.cursor_position[1] + 1]
             >= module.config.performance.max_debounce
     end
 
@@ -1452,11 +1455,11 @@ module.on_event = function(event)
         local buf = event.buffer
         local line_count = vim.api.nvim_buf_line_count(buf)
 
-        vim.api.nvim_buf_clear_namespace(buf, module.private.icon_namespace, 0, -1)
-        vim.api.nvim_buf_clear_namespace(buf, module.private.code_block_namespace, 0, -1)
+        vim.api.nvim_buf_clear_namespace(buf, this.icon_namespace, 0, -1)
+        vim.api.nvim_buf_clear_namespace(buf, this.code_block_namespace, 0, -1)
 
         if line_count < module.config.performance.increment then
-            module.public.trigger_icons(buf, has_conceal, module.private.icons, module.private.icon_namespace)
+            module.public.trigger_icons(buf, has_conceal, this.icons, this.icon_namespace)
             module.public.trigger_code_block_highlights(buf, has_conceal)
         else
             -- This bit of code gets triggered if the line count of the file is bigger than one increment level
@@ -1478,8 +1481,8 @@ module.on_event = function(event)
                 module.public.trigger_icons(
                     buf,
                     has_conceal,
-                    module.private.icons,
-                    module.private.icon_namespace,
+                    this.icons,
+                    this.icon_namespace,
                     line_begin,
                     line_end
                 )
@@ -1519,14 +1522,14 @@ module.on_event = function(event)
             )
         end
 
-        module.private.attach_uid = module.private.attach_uid + 1
-        local uid_upvalue = module.private.attach_uid
+        this.attach_uid = this.attach_uid + 1
+        local uid_upvalue = this.attach_uid
 
         vim.api.nvim_buf_attach(buf, false, {
             on_lines = function(_, cur_buf, _, start, _end)
                 -- There are edge cases where the current buffer is not the same as the tracked buffer,
                 -- which causes desyncs
-                if buf ~= cur_buf or not module.private.enabled or uid_upvalue ~= module.private.attach_uid then
+                if buf ~= cur_buf or not this.enabled or uid_upvalue ~= this.attach_uid then
                     return true
                 end
 
@@ -1534,7 +1537,7 @@ module.on_event = function(event)
                     return
                 end
 
-                module.private.last_change.active = true
+                this.last_change.active = true
 
                 local mode = vim.api.nvim_get_mode().mode
 
@@ -1545,7 +1548,7 @@ module.on_event = function(event)
                 )
 
                 if mode ~= "i" then
-                    module.private.debounce_counters[event.cursor_position[1] + 1] = module.private.debounce_counters[event.cursor_position[1] + 1]
+                    this.debounce_counters[event.cursor_position[1] + 1] = this.debounce_counters[event.cursor_position[1] + 1]
                         + 1
 
                     schedule(function()
@@ -1565,8 +1568,8 @@ module.on_event = function(event)
                         module.public.trigger_icons(
                             buf,
                             has_conceal,
-                            module.private.icons,
-                            module.private.icon_namespace,
+                            this.icons,
+                            this.icon_namespace,
                             start,
                             _end
                         )
@@ -1577,38 +1580,38 @@ module.on_event = function(event)
                         module.public.trigger_code_block_highlights(buf, has_conceal)
 
                         vim.schedule(function()
-                            module.private.debounce_counters[event.cursor_position[1] + 1] = module.private.debounce_counters[event.cursor_position[1] + 1]
+                            this.debounce_counters[event.cursor_position[1] + 1] = this.debounce_counters[event.cursor_position[1] + 1]
                                 - 1
                         end)
                     end)
                 else
                     schedule(neorg.lib.wrap(module.public.trigger_code_block_highlights, buf, has_conceal, start, _end))
 
-                    if module.private.largest_change_start == -1 then
-                        module.private.largest_change_start = start
+                    if this.largest_change_start == -1 then
+                        this.largest_change_start = start
                     end
 
-                    if module.private.largest_change_end == -1 then
-                        module.private.largest_change_end = _end
+                    if this.largest_change_end == -1 then
+                        this.largest_change_end = _end
                     end
 
-                    module.private.largest_change_start = start < module.private.largest_change_start and start
-                        or module.private.largest_change_start
-                    module.private.largest_change_end = _end > module.private.largest_change_end and _end
-                        or module.private.largest_change_end
+                    this.largest_change_start = start < this.largest_change_start and start
+                        or this.largest_change_start
+                    this.largest_change_end = _end > this.largest_change_end and _end
+                        or this.largest_change_end
                 end
             end,
         })
     elseif event.name == "insertenter" then
         schedule(function()
-            module.private.last_change = {
+            this.last_change = {
                 active = false,
                 line = event.cursor_position[1] - 1,
             }
 
             vim.api.nvim_buf_clear_namespace(
                 event.buffer,
-                module.private.icon_namespace,
+                this.icon_namespace,
                 event.cursor_position[1] - 1,
                 event.cursor_position[1]
             )
@@ -1619,44 +1622,44 @@ module.on_event = function(event)
         end
 
         schedule(function()
-            if not module.private.last_change.active or module.private.largest_change_end == -1 then
+            if not this.last_change.active or this.largest_change_end == -1 then
                 module.public.trigger_icons(
                     event.buffer,
                     has_conceal,
-                    module.private.icons,
-                    module.private.icon_namespace,
-                    module.private.last_change.line,
-                    module.private.last_change.line + 1
+                    this.icons,
+                    this.icon_namespace,
+                    this.last_change.line,
+                    this.last_change.line + 1
                 )
             else
                 module.public.trigger_icons(
                     event.buffer,
                     has_conceal,
-                    module.private.icons,
-                    module.private.icon_namespace,
-                    module.private.largest_change_start,
-                    module.private.largest_change_end
+                    this.icons,
+                    this.icon_namespace,
+                    this.largest_change_start,
+                    this.largest_change_end
                 )
             end
 
-            module.private.largest_change_start, module.private.largest_change_end = -1, -1
+            this.largest_change_start, this.largest_change_end = -1, -1
         end)
     elseif event.name == "vimleavepre" then
-        module.private.disable_deferred_updates = true
+        this.disable_deferred_updates = true
     elseif event.name == "update_region" then
         schedule(function()
             vim.api.nvim_buf_clear_namespace(
                 event.buffer,
-                module.private.icon_namespace,
+                this.icon_namespace,
                 event.payload.start,
                 event.payload["end"]
             )
 
             module.public.trigger_icons(
                 event.buffer,
-                module.private.has_conceal,
-                module.private.icons,
-                module.private.icon_namespace,
+                this.has_conceal,
+                this.icons,
+                this.icon_namespace,
                 event.payload.start,
                 event.payload["end"]
             )

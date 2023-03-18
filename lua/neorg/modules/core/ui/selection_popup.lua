@@ -4,7 +4,7 @@
 local modules = require("neorg.modules")
 local module = modules.extend("core.ui.selection_popup")
 
-module.private = {
+local this = {
     -- Stores all currently open selection popups
     callbacks = {},
 }
@@ -16,7 +16,7 @@ module.public = {
     ---@param key string #The key that was pressed
     ---@param type string #The type of element the callback belongs to (could be "flag", "switch" etc.)
     invoke_key_in_selection = function(name, key, type)
-        local self = module.private.callbacks[name]
+        local self = this.callbacks[name]
         local real_type = ({ type:gsub("<(.+)>", "%1") })[1]
 
         if self.localcallbacks[real_type] then
@@ -330,7 +330,7 @@ module.public = {
                     end)()(data)
                 end)
 
-                module.private.callbacks[name] = self
+                this.callbacks[name] = self
 
                 -- Actually render the flag
                 renderer:render({
@@ -391,7 +391,7 @@ module.public = {
                     end)()
                 end)
 
-                module.private.callbacks[name] = self
+                this.callbacks[name] = self
 
                 -- Actually render the flag
                 renderer:render({
@@ -498,7 +498,7 @@ module.public = {
                 self:add("prompt", text, callback)
                 self = self:blank()
 
-                module.private.callbacks[name] = self
+                this.callbacks[name] = self
 
                 -- Create prompt text
                 vim.fn.prompt_setprompt(buffer, configuration.text .. configuration.delimiter)
@@ -606,7 +606,7 @@ module.public = {
         }
 
         -- Attach the selection to a list of callbacks
-        module.private.callbacks[name] = selection
+        this.callbacks[name] = selection
 
         return selection
     end,

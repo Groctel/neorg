@@ -10,7 +10,7 @@ local modules = require("neorg.modules")
 local module = modules.create("core.integrations.treesitter")
 local require_relative = require("neorg.utils").require_relative
 
-module.private = {
+local this = {
     ts_utils = nil,
     link_query = [[
                 (link) @next-segment
@@ -95,7 +95,7 @@ module.load = function()
         })
     end
 
-    module.private.ts_utils = ts_utils
+    this.ts_utils = ts_utils
 
     module.required["core.mode"].add_mode("traverse-heading")
     module.required["core.keybinds"].register_keybinds(
@@ -113,7 +113,7 @@ module.public = {
     --- Gives back an instance of `nvim-treesitter.ts_utils`
     ---@return table #`nvim-treesitter.ts_utils`
     get_ts_utils = function()
-        return module.private.ts_utils
+        return this.ts_utils
     end,
 
     --- Jumps to the next match of a query in the current buffer
@@ -141,7 +141,7 @@ module.public = {
 
                 -- Find and go to the first matching node that starts after the current cursor position.
                 if (start_line == line_number and start_col > col_number) or start_line > line_number then
-                    module.private.ts_utils.goto_node(node)
+                    this.ts_utils.goto_node(node)
                     return
                 end
             end
@@ -184,7 +184,7 @@ module.public = {
             ::continue::
         end
         if final_node then
-            module.private.ts_utils.goto_node(final_node)
+            this.ts_utils.goto_node(final_node)
         end
     end,
 
@@ -694,13 +694,13 @@ module.public = {
 module.on_event = function(event)
     if event.referrer.name == "core.keybinds" then
         if event.name == "core.integrations.treesitter.next.heading" then
-            module.public.goto_next_query_match(module.private.heading_query)
+            module.public.goto_next_query_match(this.heading_query)
         elseif event.name == "core.integrations.treesitter.previous.heading" then
-            module.public.goto_previous_query_match(module.private.heading_query)
+            module.public.goto_previous_query_match(this.heading_query)
         elseif event.name == "core.integrations.treesitter.next.link" then
-            module.public.goto_next_query_match(module.private.link_query)
+            module.public.goto_next_query_match(this.link_query)
         elseif event.name == "core.integrations.treesitter.previous.link" then
-            module.public.goto_previous_query_match(module.private.link_query)
+            module.public.goto_previous_query_match(this.link_query)
         end
     elseif event.name == "sync-parsers" then
         local ok = pcall(vim.cmd, "TSInstall! norg")

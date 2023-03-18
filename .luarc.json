@@ -3,8 +3,7 @@
     "Lua.diagnostics.globals": [
         "_neorgcmd_generate_completions",
         "_neorg_module_autocommand_triggered",
-        "neorg",
-        "vim",
+        "vim"
     ],
     "workspace.checkThirdParty": false
 }

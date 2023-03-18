@@ -119,8 +119,8 @@ module.on_event = function(event)
         )
 
         local indentkeys = "o,O,*<M-o>,*<M-O>"
-            .. neorg.lib.when(module.config.format_on_enter, ",*<CR>", "")
-            .. neorg.lib.when(module.config.format_on_escape, ",*<Esc>", "")
+            .. (module.config.format_on_enter and ",*<CR>" or "")
+            .. (module.config.format_on_escape and ",*<Esc>" or "")
         vim.api.nvim_buf_set_option(event.buffer, "indentkeys", indentkeys)
     end
 end

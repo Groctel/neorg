@@ -457,14 +457,22 @@ module.public = {
             }
         end
 
-        local rs, cs, re, ce = neorg.lib.when(type(node) == "table", function()
+        -- TODO: Rename please!
+        local function init_weird_names_table()
             local brs, bcs, _, _ = node[1]:range()
             local _, _, ere, ece = node[#node]:range()
             return brs, bcs, ere, ece
-        end, function()
+        end
+
+        local function init_weird_names_not_table()
             local a, b, c, d = node:range()
             return a, b, c, d
-        end)
+        end
+
+        local rs, cs, re, ce = (
+            type(node) == "table"
+            and init_weird_names_table
+            or init_weird_names_not_table)()
 
         return {
             row_start = rs,

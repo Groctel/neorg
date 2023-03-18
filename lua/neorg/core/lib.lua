@@ -5,6 +5,7 @@
 
 local lib = {}
 
+
 --- Returns the item that matches the first item in statements
 ---@param value any #The value to compare against
 ---@param compare? function #A custom comparison function
@@ -74,21 +75,6 @@ lib.match = function(value, compare)
     end
 end
 
---- Wrapped around `match()` that performs an action based on a condition
----@param comparison boolean #The comparison to perform
----@param when_true function|any #The value to return when `comparison` is true
----@param when_false function|any #The value to return when `comparison` is false
----@return any #The value that either `when_true` or `when_false` returned
-lib.when = function(comparison, when_true, when_false)
-    if type(comparison) ~= "boolean" then
-        comparison = (comparison ~= nil)
-    end
-
-    return lib.match(type(comparison) == "table" and unpack(comparison) or comparison)({
-        ["true"] = when_true,
-        ["false"] = when_false,
-    })
-end
 
 --- Maps a function to every element of a table
 --  The function can return a value, in which case that specific element will be assigned
@@ -125,47 +111,6 @@ lib.filter = function(tbl, callback)
     end
 end
 
---- Finds any key in an array
----@param tbl array #An array of values to iterate over
----@param element any #The item to find
----@return any|nil #The found value or `nil` if nothing could be found
-lib.find = function(tbl, element)
-    return lib.filter(tbl, function(key, value)
-        if value == element then
-            return key
-        end
-    end)
-end
-
---- Inserts a value into a table if it doesn't exist, else returns the existing value.
----@param tbl table #The table to insert into
----@param value number|string #The value to insert
----@return any #The item to return
-lib.insert_or = function(tbl, value)
-    local item = lib.find(tbl, value)
-
-    return item and tbl[item]
-        or (function()
-            table.insert(tbl, value)
-            return value
-        end)()
-end
-
---- Picks a set of values from a table and returns them in an array
----@param tbl table #The table to extract the keys from
----@param values array[string] #An array of strings, these being the keys you'd like to extract
----@return array[any] #The picked values from the table
-lib.pick = function(tbl, values)
-    local result = {}
-
-    for _, value in ipairs(values) do
-        if tbl[value] then
-            table.insert(result, tbl[value])
-        end
-    end
-
-    return result
-end
 
 --- Tries to extract a variable in all nesting levels of a table.
 ---@param tbl table #The table to traverse
@@ -187,27 +132,6 @@ lib.extract = function(tbl, value)
     return results
 end
 
---- Wraps a conditional "not" function in a vim.tbl callback
----@param cb function #The function to wrap
----@vararg ... #The arguments to pass to the wrapped function
----@return function #The wrapped function in a vim.tbl callback
-lib.wrap_cond_not = function(cb, ...)
-    local params = { ... }
-    return function(v)
-        return not cb(v, unpack(params))
-    end
-end
-
---- Wraps a conditional function in a vim.tbl callback
----@param cb function #The function to wrap
----@vararg ... #The arguments to pass to the wrapped function
----@return function #The wrapped function in a vim.tbl callback
-lib.wrap_cond = function(cb, ...)
-    local params = { ... }
-    return function(v)
-        return cb(v, unpack(params))
-    end
-end
 
 --- Wraps a function in a callback
 ---@param function_pointer function #The function to wrap
@@ -220,7 +144,7 @@ lib.wrap = function(function_pointer, ...)
         local prev = function_pointer
 
         -- luacheck: push ignore
-        function_pointer = function(...)
+        function_pointer = function()
             return prev, unpack(params)
         end
         -- luacheck: pop
@@ -231,43 +155,6 @@ lib.wrap = function(function_pointer, ...)
     end
 end
 
---- Modifiers for the `map` function
-lib.mod = {
-    --- Wrapper function to add two values
-    --  This function only takes in one argument because the second value
-    --  to add is provided as a parameter in the callback.
-    ---@param amount number #The number to add
-    ---@return function #A callback adding the static value to the dynamic amount
-    add = function(amount)
-        return function(_, value)
-            return value + amount
-        end
-    end,
-
-    --- Wrapper function to set a value to another value in a `map` sequence
-    ---@param to any #A static value to set each element of the table to
-    ---@return function #A callback that returns the static value
-    modify = function(to)
-        return function()
-            return to
-        end
-    end,
-
-    --- Filtering modifiers that exclude certain elements from a table
-    exclude = {
-        first = function(func, alt)
-            return function(i, val)
-                return i == 1 and (alt and alt(i, val) or val) or func(i, val)
-            end
-        end,
-
-        last = function(func, alt)
-            return function(i, val, tbl)
-                return next(tbl, i) and func(i, val) or (alt and alt(i, val) or val)
-            end
-        end,
-    },
-}
 
 --- Repeats an arguments `index` amount of times
 ---@param value any #The value to repeat
@@ -284,12 +171,12 @@ end
 --- Lazily concatenates a string to prevent runtime errors where an object may not exist
 --  Consider the following example:
 --
---      lib.when(str ~= nil, str .. " extra text", "")
+--      str ~= nil and str .. " extra text" or ""
 --
 --  This would fail, simply because the string concatenation will still be evaluated in order
 --  to be placed inside the variable. You may use:
 --
---      lib.when(str ~= nil, lib.lazy_string_concat(str, " extra text"), "")
+--      str ~= nil and lib.lazy_string_concat(str, " extra text") or ""
 --
 --  To mitigate this issue directly.
 --- @vararg string #An unlimited number of strings
@@ -312,6 +199,7 @@ lib.to_keys = function(values, default)
     return ret
 end
 
+
 --- Constructs a new key-pair table by running a callback on all elements of an array.
 ---@param keys string[] #A string array with the keys to iterate over
 ---@param cb function #A function that gets invoked with each key and returns a value to be placed in the output table
@@ -326,27 +214,10 @@ lib.construct = function(keys, cb)
     return result
 end
 
---- If `val` is a function, executes it with the desired arguments, else just returns `val`
----@param val any|function #Either a function or any other value
----@vararg any #Potential arguments to give `val` if it is a function
----@return any #The returned evaluation of `val`
-lib.eval = function(val, ...)
-    if type(val) == "function" then
-        return val(...)
-    end
-
-    return val
-end
-
---- Extends a list by constructing a new one vs mutating an existing
---  list in the case of `vim.list_extend`
-lib.list_extend = function(list, ...)
-    return list and { unpack(list), unpack(lib.list_extend(...)) } or {}
-end
 
 --- Converts a table with `key = value` pairs to a `{ key, value }` array.
 ---@param tbl_with_keys table #A table with key-value pairs
----@return array #An array of `{ key, value }` pairs.
+---@return table<any, any> #An array of `{ key, value }` pairs.
 lib.unroll = function(tbl_with_keys)
     local res = {}
 
@@ -356,6 +227,7 @@ lib.unroll = function(tbl_with_keys)
 
     return res
 end
+
 
 --- Works just like pcall, except returns only a single value or nil (useful for ternary operations
 --  which are not possible with a function like `pcall` that returns two values).
@@ -372,14 +244,5 @@ lib.inline_pcall = function(func, ...)
     -- return nil
 end
 
---- Perform a backwards search for a character and return the index of that character
----@param str string #The string to search
----@param char string #The substring to search for
----@return number|nil #The index of the found substring or `nil` if not found
-lib.rfind = function(str, char)
-    local length = str:len()
-    local found_from_back = str:reverse():find(char)
-    return found_from_back and length - found_from_back
-end
 
 return lib

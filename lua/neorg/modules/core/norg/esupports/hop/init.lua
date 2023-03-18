@@ -756,10 +756,10 @@ module.private = {
 
         local range = module.required["core.integrations.treesitter"].get_node_range(link_node)
 
-        local prefix = neorg.lib.when(
-            parsed_link_information.link_type == "generic" and not force_type,
-            "#",
-            neorg.lib.match(most_similar.node:type())({
+        local prefix = (
+            parsed_link_information.link_type == "generic" and not force_type
+            and "#"
+            or neorg.lib.match(most_similar.node:type())({
                 heading1 = "*",
                 heading2 = "**",
                 heading3 = "***",
@@ -771,8 +771,7 @@ module.private = {
                 single_footnote = "^",
                 multi_footnote = "^",
                 _ = "#",
-            })
-        ) .. " "
+            })) .. " "
 
         local function callback(replace)
             vim.api.nvim_buf_set_text(
@@ -787,19 +786,17 @@ module.private = {
 
         callback(
             "{"
-                .. neorg.lib.when(
-                    parsed_link_information.link_file_text,
-                    neorg.lib.lazy_string_concat(":", parsed_link_information.link_file_text, ":"),
-                    ""
-                )
+                .. (
+                    parsed_link_information.link_file_text
+                    and neorg.lib.lazy_string_concat(":", parsed_link_information.link_file_text, ":")
+                    or "")
                 .. prefix
                 .. most_similar.text
                 .. "}"
-                .. neorg.lib.when(
-                    parsed_link_information.link_description,
-                    neorg.lib.lazy_string_concat("[", parsed_link_information.link_description, "]"),
-                    ""
-                )
+                .. (
+                    parsed_link_information.link_description
+                    and neorg.lib.lazy_string_concat("[", parsed_link_information.link_description, "]")
+                    or "")
         )
     end,
 }

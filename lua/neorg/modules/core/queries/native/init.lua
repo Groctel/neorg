@@ -197,10 +197,12 @@ module.public = {
             local uri = vim.uri_from_bufnr(buf)
             local fname = vim.uri_to_fname(uri)
 
-            neorg.lib.when(vim.fn.bufloaded(buf) == 1, function()
+            if vim.fn.bufloaded(buf) == 1 then
                 vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
                 vim.api.nvim_buf_call(buf, neorg.lib.wrap(vim.cmd, "write!"))
-            end, neorg.lib.wrap(vim.fn.writefile, lines, fname))
+            else
+                neorg.lib.wrap(vim.fn.writefile, lines, fname)
+            end
 
             -- We reset the state as false because we are consistent with the original file
             temp_buf.changed = false
@@ -212,11 +214,11 @@ module.public = {
     --- @overload fun()
     ---@param buf number #The content relative to the provided buffer
     delete_content = function(buf)
-        neorg.lib.when(buf, function()
+        if buf then
             module.private.data.temp_bufs[buf] = nil
-        end, function()
+        else
             module.private.data.temp_bufs = {}
-        end)
+        end
     end,
 }
 

@@ -9,6 +9,7 @@ local neorg = require("neorg.core")
 local log = neorg.log
 local modules = require("neorg.modules")
 local module = modules.create("core.neorgcmd")
+local require_relative = require("neorg.utils").require_relative
 
 
 module.load = function()
@@ -20,35 +21,25 @@ module.load = function()
     })
 
     -- Loop through all the command modules we want to load and load them
-    for _, command in ipairs(module.config.public.load) do
+    for _, command in ipairs(module.config.load) do
         -- If one of the command modules is "default" then load all the default modules
         if command == "default" then
-            for _, default_command in ipairs(module.config.public.default) do
+            for _, default_command in ipairs(module.config.default) do
                 module.public.add_commands_from_file(default_command)
             end
         end
     end
 end
 
-module.config.public = {
-    load = {
-        "default",
-    },
-
-    default = {
-        "module.list",
-        "module.load",
-        "return",
-    },
-}
+module.config = require_relative(..., "config")
 
 ---@class core.neorgcmd
 module.public = {
     -- The table containing all the functions. This can get a tad complex so I recommend you read the wiki entry
     neorg_commands = {},
 
-    --- Recursively merges the contents of the module's config.public.funtions table with core.neorgcmd's module.config.public.neorg_commands table.
-    ---@param module_name string #An absolute path to a loaded module with a module.config.public.neorg_commands table following a valid structure
+    --- Recursively merges the contents of the module's config.funtions table with core.neorgcmd's module.config.neorg_commands table.
+    ---@param module_name string #An absolute path to a loaded module with a module.config.neorg_commands table following a valid structure
     add_commands = function(module_name)
         local module_config = modules.get_module(module_name)
 
@@ -60,8 +51,8 @@ module.public = {
             vim.tbl_deep_extend("force", module.public.neorg_commands, module_config.neorg_commands)
     end,
 
-    --- Recursively merges the provided table with the module.config.public.neorg_commands table.
-    ---@param functions table #A table that follows the module.config.public.neorg_commands structure
+    --- Recursively merges the provided table with the module.config.neorg_commands table.
+    ---@param functions table #A table that follows the module.config.neorg_commands structure
     add_commands_from_table = function(functions)
         module.public.neorg_commands = vim.tbl_deep_extend("force", module.public.neorg_commands, functions)
     end,

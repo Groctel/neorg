@@ -5,56 +5,17 @@
     ---
 --]]
 
-local neorg = require("neorg.core")
 local modules = require("neorg.modules")
 local module = modules.create("core.norg.esupports.metagen")
+local require_relative = require("neorg.utils").require_relative
 
 module.setup = function()
     return { requires = { "core.autocommands", "core.keybinds", "core.integrations.treesitter" } }
 end
 
-module.config.public = {
-    -- One of "none", "auto" or "empty"
-    -- - None generates no metadata
-    -- - Auto generates metadata if it is not present
-    -- - Empty generates metadata only for new files/buffers.
-    type = "none",
 
-    -- Whether updated date field should be automatically updated on save if required
-    update_date = true,
+module.config = require_relative(..., "config")
 
-    -- How to generate a tabulation inside the `@document.meta` tag
-    tab = "",
-
-    -- Custom delimiter between tag and value
-    delimiter = ": ",
-
-    -- Custom template to use for generating content inside `@document.meta` tag
-    template = {
-        {
-            "title",
-            function()
-                return vim.fn.expand("%:p:t:r")
-            end,
-        },
-        { "description", "" },
-        { "authors", neorg.utils.get_username },
-        { "categories", "" },
-        {
-            "created",
-            function()
-                return os.date("%Y-%m-%d")
-            end,
-        },
-        {
-            "updated",
-            function()
-                return os.date("%Y-%m-%d")
-            end,
-        },
-        { "version", neorg.configuration.version },
-    },
-}
 
 module.private = {
     buffers = {},
@@ -117,11 +78,11 @@ module.public = {
     ---@param buf number #The buffer to query potential data from
     ---@return table #A table of strings that can be directly piped to `nvim_buf_set_lines`
     construct_metadata = function(buf)
-        local template = module.config.public.template
-        local whitespace = type(module.config.public.tab) == "function" and module.config.public.tab()
-            or module.config.public.tab
-        local delimiter = type(module.config.public.delimiter) == "function" and module.config.public.delimiter()
-            or module.config.public.delimiter
+        local template = module.config.template
+        local whitespace = type(module.config.tab) == "function" and module.config.tab()
+            or module.config.tab
+        local delimiter = type(module.config.delimiter) == "function" and module.config.delimiter()
+            or module.config.delimiter
 
         local result = {
             "@document.meta",
@@ -242,15 +203,15 @@ module.load = function()
         })
     end)
 
-    if module.config.public.type == "auto" then
+    if module.config.type == "auto" then
         module.required["core.autocommands"].enable_autocommand("BufEnter")
         module.private.listen_event = "bufenter"
-    elseif module.config.public.type == "empty" then
+    elseif module.config.type == "empty" then
         module.required["core.autocommands"].enable_autocommand("BufNewFile")
         module.private.listen_event = "bufnewfile"
     end
 
-    if module.config.public.update_date then
+    if module.config.update_date then
         vim.api.nvim_create_autocmd("BufWritePre", {
             pattern = "*.norg",
             callback = function()

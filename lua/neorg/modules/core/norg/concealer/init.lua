@@ -43,7 +43,7 @@ local function schedule(func)
             module.private.disable_deferred_updates
             or (
                 (module.private.debounce_counters[vim.api.nvim_win_get_cursor(0)[1] + 1] or 0)
-                >= module.config.public.performance.max_debounce
+                >= module.config.performance.max_debounce
             )
         then
             return
@@ -213,7 +213,7 @@ module.public = {
     ---@param to? number #The line number to keep parsing until (used for incremental updates)
     trigger_code_block_highlights = function(buf, has_conceal, from, to)
         -- If the code block dimming is disabled, return right away.
-        if not module.config.public.dim_code_blocks.enabled then
+        if not module.config.dim_code_blocks.enabled then
             return
         end
 
@@ -261,7 +261,7 @@ module.public = {
                     )
 
                     schedule(function()
-                        if module.config.public.dim_code_blocks.conceal then
+                        if module.config.dim_code_blocks.conceal then
                             pcall(
                                 vim.api.nvim_buf_set_extmark,
                                 buf,
@@ -295,18 +295,18 @@ module.public = {
                         end
 
                         if
-                            module.config.public.dim_code_blocks.conceal
-                            and module.config.public.dim_code_blocks.adaptive
+                            module.config.dim_code_blocks.conceal
+                            and module.config.dim_code_blocks.adaptive
                         then
-                            module.config.public.dim_code_blocks.content_only = has_conceal
+                            module.config.dim_code_blocks.content_only = has_conceal
                         end
 
-                        if module.config.public.dim_code_blocks.content_only then
+                        if module.config.dim_code_blocks.content_only then
                             range.row_start = range.row_start + 1
                             range.row_end = range.row_end - 1
                         end
 
-                        local width = module.config.public.dim_code_blocks.width
+                        local width = module.config.dim_code_blocks.width
                         local hl_eol = width == "fullwidth"
 
                         local lines = vim.api.nvim_buf_get_lines(
@@ -338,7 +338,7 @@ module.public = {
                                     module.private.code_block_namespace,
                                     linenr,
                                     linenr + 1,
-                                    math.max(range.column_start - module.config.public.dim_code_blocks.padding.left, 0),
+                                    math.max(range.column_start - module.config.dim_code_blocks.padding.left, 0),
                                     nil,
                                     hl_eol,
                                     "blend",
@@ -356,7 +356,7 @@ module.public = {
                                                     " ",
                                                     longest_len
                                                         - line_width
-                                                        + module.config.public.dim_code_blocks.padding.right
+                                                        + module.config.dim_code_blocks.padding.right
                                                 ),
                                                 "@neorg.tags.ranged_verbatim.code_block",
                                             },
@@ -386,7 +386,7 @@ module.public = {
                                                 " ",
                                                 math.max(
                                                     range.column_start
-                                                        - module.config.public.dim_code_blocks.padding.left,
+                                                        - module.config.dim_code_blocks.padding.left,
                                                     0
                                                 )
                                             ),
@@ -398,10 +398,10 @@ module.public = {
                                                         " ",
                                                         math.max(
                                                             (longest_len - range.column_start)
-                                                                + module.config.public.dim_code_blocks.padding.left
-                                                                + module.config.public.dim_code_blocks.padding.right
+                                                                + module.config.dim_code_blocks.padding.left
+                                                                + module.config.dim_code_blocks.padding.right
                                                                 - math.max(
-                                                                    module.config.public.dim_code_blocks.padding.left
+                                                                    module.config.dim_code_blocks.padding.left
                                                                         - range.column_start,
                                                                     0
                                                                 ),
@@ -836,7 +836,8 @@ module.public = {
     end,
 }
 
-module.config.public = {
+-- TODO: Decouple config from module and remove private and cutsom config
+module.config = {
     -- Which icon preset to use
     -- Go to [imports](#imports) to see which ones are currently defined
     -- E.g `core.norg.concealer.preset_diamond` will be `preset = "diamond"`
@@ -1035,7 +1036,7 @@ module.config.public = {
                 query = "(quote2_prefix) @icon",
                 render = function(self)
                     return {
-                        { self.icon, module.config.public.icons.quote.level_1.highlight },
+                        { self.icon, module.config.icons.quote.level_1.highlight },
                         { self.icon, self.highlight },
                     }
                 end,
@@ -1048,8 +1049,8 @@ module.config.public = {
                 query = "(quote3_prefix) @icon",
                 render = function(self)
                     return {
-                        { self.icon, module.config.public.icons.quote.level_1.highlight },
-                        { self.icon, module.config.public.icons.quote.level_2.highlight },
+                        { self.icon, module.config.icons.quote.level_1.highlight },
+                        { self.icon, module.config.icons.quote.level_2.highlight },
                         { self.icon, self.highlight },
                     }
                 end,
@@ -1062,9 +1063,9 @@ module.config.public = {
                 query = "(quote4_prefix) @icon",
                 render = function(self)
                     return {
-                        { self.icon, module.config.public.icons.quote.level_1.highlight },
-                        { self.icon, module.config.public.icons.quote.level_2.highlight },
-                        { self.icon, module.config.public.icons.quote.level_3.highlight },
+                        { self.icon, module.config.icons.quote.level_1.highlight },
+                        { self.icon, module.config.icons.quote.level_2.highlight },
+                        { self.icon, module.config.icons.quote.level_3.highlight },
                         { self.icon, self.highlight },
                     }
                 end,
@@ -1077,10 +1078,10 @@ module.config.public = {
                 query = "(quote5_prefix) @icon",
                 render = function(self)
                     return {
-                        { self.icon, module.config.public.icons.quote.level_1.highlight },
-                        { self.icon, module.config.public.icons.quote.level_2.highlight },
-                        { self.icon, module.config.public.icons.quote.level_3.highlight },
-                        { self.icon, module.config.public.icons.quote.level_4.highlight },
+                        { self.icon, module.config.icons.quote.level_1.highlight },
+                        { self.icon, module.config.icons.quote.level_2.highlight },
+                        { self.icon, module.config.icons.quote.level_3.highlight },
+                        { self.icon, module.config.icons.quote.level_4.highlight },
                         { self.icon, self.highlight },
                     }
                 end,
@@ -1093,11 +1094,11 @@ module.config.public = {
                 query = "(quote6_prefix) @icon",
                 render = function(self)
                     return {
-                        { self.icon, module.config.public.icons.quote.level_1.highlight },
-                        { self.icon, module.config.public.icons.quote.level_2.highlight },
-                        { self.icon, module.config.public.icons.quote.level_3.highlight },
-                        { self.icon, module.config.public.icons.quote.level_4.highlight },
-                        { self.icon, module.config.public.icons.quote.level_5.highlight },
+                        { self.icon, module.config.icons.quote.level_1.highlight },
+                        { self.icon, module.config.icons.quote.level_2.highlight },
+                        { self.icon, module.config.icons.quote.level_3.highlight },
+                        { self.icon, module.config.icons.quote.level_4.highlight },
+                        { self.icon, module.config.icons.quote.level_5.highlight },
                         { self.icon, self.highlight },
                     }
                 end,
@@ -1311,21 +1312,21 @@ module.config.public = {
 }
 
 module.load = function()
-    if not module.config.private["icon_preset_" .. module.config.public.icon_preset] then
+    if not module.private_config["icon_preset_" .. module.config.icon_preset] then
         neorg.log.error(
             string.format(
                 "Unable to load icon preset '%s' - such a preset does not exist",
-                module.config.public.icon_preset
+                module.config.icon_preset
             )
         )
         return
     end
 
-    module.config.public.icons = vim.tbl_deep_extend(
+    module.config.icons = vim.tbl_deep_extend(
         "force",
-        module.config.public.icons,
-        module.config.private["icon_preset_" .. module.config.public.icon_preset] or {},
-        module.config.custom
+        module.config.icons,
+        module.private_config["icon_preset_" .. module.config.icon_preset] or {},
+        module.custom_config
     )
 
     --- Queries all icons that have their `enable = true` flags set
@@ -1367,7 +1368,7 @@ module.load = function()
     end
 
     -- Set the module.private.icons variable to the values of the enabled icons
-    module.private.icons = vim.tbl_values(get_enabled_icons(module.config.public.icons))
+    module.private.icons = vim.tbl_values(get_enabled_icons(module.config.icons))
 
     -- Enable the required autocommands (these will be used to determine when to update conceals in the buffer)
     module.required["core.autocommands"].enable_autocommand("BufEnter")
@@ -1402,7 +1403,7 @@ module.load = function()
                     module.private.icon_namespace
                 )
 
-                if module.config.public.dim_code_blocks.conceal and module.config.public.dim_code_blocks.adaptive then
+                if module.config.dim_code_blocks.conceal and module.config.dim_code_blocks.adaptive then
                     module.public.trigger_code_block_highlights(current_buffer, has_conceal)
                 end
             end,
@@ -1424,7 +1425,7 @@ module.on_event = function(event)
 
     local function should_debounce()
         return module.private.debounce_counters[event.cursor_position[1] + 1]
-            >= module.config.public.performance.max_debounce
+            >= module.config.performance.max_debounce
     end
 
     local has_conceal = (
@@ -1433,7 +1434,7 @@ module.on_event = function(event)
     )
 
     if event.name == "bufenter" and event.payload.norg then
-        if module.config.public.folds and vim.api.nvim_win_is_valid(event.window) then
+        if module.config.folds and vim.api.nvim_win_is_valid(event.window) then
             local opts = {
                 scope = "local",
                 win = event.window,
@@ -1454,7 +1455,7 @@ module.on_event = function(event)
         vim.api.nvim_buf_clear_namespace(buf, module.private.icon_namespace, 0, -1)
         vim.api.nvim_buf_clear_namespace(buf, module.private.code_block_namespace, 0, -1)
 
-        if line_count < module.config.public.performance.increment then
+        if line_count < module.config.performance.increment then
             module.public.trigger_icons(buf, has_conceal, module.private.icons, module.private.icon_namespace)
             module.public.trigger_code_block_highlights(buf, has_conceal)
         else
@@ -1465,12 +1466,12 @@ module.on_event = function(event)
 
             -- This points to the current block the user's cursor is in
             local block_current =
-                math.floor((line_count / module.config.public.performance.increment) % event.cursor_position[1])
+                math.floor((line_count / module.config.performance.increment) % event.cursor_position[1])
 
             local function trigger_conceals_for_block(block)
-                local line_begin = block == 0 and 0 or block * module.config.public.performance.increment - 1
+                local line_begin = block == 0 and 0 or block * module.config.performance.increment - 1
                 local line_end = math.min(
-                    block * module.config.public.performance.increment + module.config.public.performance.increment - 1,
+                    block * module.config.performance.increment + module.config.performance.increment - 1,
                     line_count
                 )
 
@@ -1493,12 +1494,12 @@ module.on_event = function(event)
             local timer = vim.loop.new_timer()
 
             timer:start(
-                module.config.public.performance.timeout,
-                module.config.public.performance.interval,
+                module.config.performance.timeout,
+                module.config.performance.interval,
                 vim.schedule_wrap(function()
                     local block_bottom_valid = block_bottom == 0
-                        or (block_bottom * module.config.public.performance.increment - 1 >= 0)
-                    local block_top_valid = block_top * module.config.public.performance.increment - 1 < line_count
+                        or (block_bottom * module.config.performance.increment - 1 >= 0)
+                    local block_top_valid = block_top * module.config.performance.increment - 1 < line_count
 
                     if not block_bottom_valid and not block_top_valid then
                         timer:stop()

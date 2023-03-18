@@ -12,6 +12,7 @@
 local neorg = require("neorg.core")
 local modules = require("neorg.modules")
 local module = modules.create("core.syntax")
+local require_relative = require("neorg.utils").require_relative
 
 local function schedule(func)
     vim.schedule(function()
@@ -19,7 +20,7 @@ local function schedule(func)
             module.private.disable_deferred_updates
             or (
                 (module.private.debounce_counters[vim.api.nvim_win_get_cursor(0)[1] + 1] or 0)
-                >= module.config.public.performance.max_debounce
+                >= module.config.performance.max_debounce
             )
         then
             return
@@ -434,15 +435,7 @@ module.public = {
     end,
 }
 
-module.config.public = {
-    -- note that these come from core.norg.concealer as well
-    performance = {
-        increment = 1250,
-        timeout = 0,
-        interval = 500,
-        max_debounce = 5,
-    },
-}
+module.config = require_relative(..., "config")
 
 module.load = function()
     -- Enabled the required autocommands
@@ -467,7 +460,7 @@ module.on_event = function(event)
 
     local function should_debounce()
         return module.private.debounce_counters[event.cursor_position[1] + 1]
-            >= module.config.public.performance.max_debounce
+            >= module.config.performance.max_debounce
     end
 
     if event.name == "bufenter" and event.payload.norg then
@@ -475,7 +468,7 @@ module.on_event = function(event)
 
         local line_count = vim.api.nvim_buf_line_count(buf)
 
-        if line_count < module.config.public.performance.increment then
+        if line_count < module.config.performance.increment then
             module.public.check_code_block_type(buf, false)
             module.public.trigger_highlight_regex_code_block(buf, false, false)
         else
@@ -486,12 +479,12 @@ module.on_event = function(event)
 
             -- This points to the current block the user's cursor is in
             local block_current =
-                math.floor((line_count / module.config.public.performance.increment) % event.cursor_position[1])
+                math.floor((line_count / module.config.performance.increment) % event.cursor_position[1])
 
             local function trigger_syntax_for_block(block)
-                local line_begin = block == 0 and 0 or block * module.config.public.performance.increment - 1
+                local line_begin = block == 0 and 0 or block * module.config.performance.increment - 1
                 local line_end = math.min(
-                    block * module.config.public.performance.increment + module.config.public.performance.increment - 1,
+                    block * module.config.performance.increment + module.config.performance.increment - 1,
                     line_count
                 )
 
@@ -506,12 +499,12 @@ module.on_event = function(event)
             local timer = vim.loop.new_timer()
 
             timer:start(
-                module.config.public.performance.timeout,
-                module.config.public.performance.interval,
+                module.config.performance.timeout,
+                module.config.performance.interval,
                 vim.schedule_wrap(function()
                     local block_bottom_valid = block_bottom == 0
-                        or (block_bottom * module.config.public.performance.increment - 1 >= 0)
-                    local block_top_valid = block_top * module.config.public.performance.increment - 1 < line_count
+                        or (block_bottom * module.config.performance.increment - 1 >= 0)
+                    local block_top_valid = block_top * module.config.performance.increment - 1 < line_count
 
                     if not block_bottom_valid and not block_top_valid then
                         timer:stop()

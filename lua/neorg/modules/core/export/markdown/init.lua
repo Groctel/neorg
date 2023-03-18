@@ -16,6 +16,7 @@ like your markdown to be exported (i.e. do you want to support certain extension
 local neorg = require("neorg.core")
 local modules = require("neorg.modules")
 local module = modules.create("core.export.markdown")
+local require_relative = require("neorg.utils").require_relative
 
 module.setup = function()
     return {
@@ -66,7 +67,7 @@ local function todo_item_extended(replace_text)
         end
 
         return {
-            output = module.config.public.extensions["todo-items-extended"] and replace_text or nil,
+            output = module.config.extensions["todo-items-extended"] and replace_text or nil,
             state = {
                 weak_indent = state.weak_indent + replace_text:len(),
             },
@@ -105,8 +106,8 @@ end
 ---
 
 module.load = function()
-    if module.config.public.extensions == "all" then
-        module.config.public.extensions = {
+    if module.config.extensions == "all" then
+        module.config.extensions = {
             "todo-items-basic",
             "todo-items-pending",
             "todo-items-extended",
@@ -116,44 +117,12 @@ module.load = function()
         }
     end
 
-    module.config.public.extensions = neorg.lib.to_keys(module.config.public.extensions)
+    module.config.extensions = neorg.lib.to_keys(module.config.extensions)
 end
 
-module.config.public = {
-    -- Any extensions you may want to use when exporting to markdown. By
-    -- default no extensions are loaded (the exporter is commonmark compliant).
-    -- You can also set this value to `"all"` to enable all extensions.
-    -- The full extension list is: `todo-items-basic`, `todo-items-pending`, `todo-items-extended`,
-    -- `definition-lists`, `mathematics` and 'metadata'.
-    extensions = {},
 
-    -- Data about how to render mathematics.
-    -- The default is recommended as it is the most common, although certain flavours
-    -- of markdown use different syntax.
-    mathematics = {
-        inline = {
-            start = "$",
-            ["end"] = "$",
-        },
-        block = {
-            start = "$$",
-            ["end"] = "$$",
-        },
-    },
+module.config = require_relative(..., "config")
 
-    -- Data about how to render metadata
-    -- There are a few ways to render metadata blocks, but this is the most
-    -- common.
-    metadata = {
-        start = "---",
-        ["end"] = "---", -- Is usually also "..."
-    },
-
-    -- Used by the exporter to know what extension to use
-    -- when creating markdown files.
-    -- The default is recommended, although you can change it.
-    extension = "md",
-}
 
 module.public = {
     export = {
@@ -234,8 +203,8 @@ module.public = {
                     return "<sub>"
                 elseif type == "inline_comment" then
                     return "<!-- "
-                elseif type == "inline_math" and module.config.public.extensions["mathematics"] then
-                    return module.config.public.mathematics.inline["start"]
+                elseif type == "inline_math" and module.config.extensions["mathematics"] then
+                    return module.config.mathematics.inline["start"]
                 end
             end,
 
@@ -260,8 +229,8 @@ module.public = {
                     return "</sub>"
                 elseif type == "inline_comment" then
                     return " -->"
-                elseif type == "inline_math" and module.config.public.extensions["mathematics"] then
-                    return module.config.public.mathematics.inline["end"]
+                elseif type == "inline_math" and module.config.extensions["mathematics"] then
+                    return module.config.mathematics.inline["end"]
                 end
             end,
 
@@ -348,22 +317,22 @@ module.public = {
                             tag_close = "-->",
                         },
                     }
-                elseif text == "math" and module.config.public.extensions["mathematics"] then
+                elseif text == "math" and module.config.extensions["mathematics"] then
                     return {
-                        output = module.config.public.mathematics.block["start"],
+                        output = module.config.mathematics.block["start"],
                         state = {
                             tag_indent = tag_start_column - 1,
-                            tag_close = module.config.public.mathematics.block["end"],
+                            tag_close = module.config.mathematics.block["end"],
                         },
                     }
                 elseif text == "document.meta" then
-                    local allows_metadata = module.config.public.extensions["metadata"]
+                    local allows_metadata = module.config.extensions["metadata"]
 
                     return {
-                        output = allows_metadata and module.config.public.metadata["start"] or nil,
+                        output = allows_metadata and module.config.metadata["start"] or nil,
                         state = {
                             tag_indent = tag_start_column - 1,
-                            tag_close = allows_metadata and module.config.public.metadata["end"] or nil,
+                            tag_close = allows_metadata and module.config.metadata["end"] or nil,
                             is_meta = true,
                         },
                     }
@@ -393,7 +362,7 @@ module.public = {
             ["ranged_verbatim_tag_content"] = function(text, node, state)
                 if state.is_meta then
                     state.is_meta = false
-                    if module.config.public.extensions["metadata"] then
+                    if module.config.extensions["metadata"] then
                         return {
                             keep_descending = true,
                             state = {
@@ -437,7 +406,7 @@ module.public = {
                 end
 
                 return {
-                    output = module.config.public.extensions["todo-items-basic"] and "[x] ",
+                    output = module.config.extensions["todo-items-basic"] and "[x] ",
                     state = {
                         weak_indent = state.weak_indent + 4,
                     },
@@ -450,7 +419,7 @@ module.public = {
                 end
 
                 return {
-                    output = module.config.public.extensions["todo-items-basic"] and "[ ] ",
+                    output = module.config.extensions["todo-items-basic"] and "[ ] ",
                     state = {
                         weak_indent = state.weak_indent + 4,
                     },
@@ -463,7 +432,7 @@ module.public = {
                 end
 
                 return {
-                    output = module.config.public.extensions["todo-items-pending"] and "[*] ",
+                    output = module.config.extensions["todo-items-pending"] and "[*] ",
                     state = {
                         weak_indent = state.weak_indent + 4,
                     },
@@ -477,11 +446,11 @@ module.public = {
             ["todo_item_uncertain"] = todo_item_extended("[ ] "),
 
             ["single_definition_prefix"] = function()
-                return module.config.public.extensions["definition-lists"] and ": "
+                return module.config.extensions["definition-lists"] and ": "
             end,
 
             ["multi_definition_prefix"] = function(_, _, state)
-                if not module.config.public.extensions["definition-lists"] then
+                if not module.config.extensions["definition-lists"] then
                     return
                 end
 
@@ -494,7 +463,7 @@ module.public = {
             end,
 
             ["multi_definition_suffix"] = function(_, _, state)
-                if not module.config.public.extensions["definition-lists"] then
+                if not module.config.extensions["definition-lists"] then
                     return
                 end
 

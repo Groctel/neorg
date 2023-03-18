@@ -277,11 +277,11 @@ function modules.load_module(module_name, parent, config)
 
     -- Load the user-defined configuration
     if config and not vim.tbl_isempty(config) then
-        module.config.custom = config
-        module.config.public = vim.tbl_deep_extend("force", module.config.public, config)
+        module.custom_config = config
+        module.config = vim.tbl_deep_extend("force", module.config, config)
     else
-        module.config.public =
-            vim.tbl_deep_extend("force", module.config.public, neorg.configuration.modules[module_name] or {})
+        module.config =
+            vim.tbl_deep_extend("force", module.config, neorg.configuration.modules[module_name] or {})
     end
 
     -- Pass execution onto load_module_from_table() and let it handle the rest
@@ -322,7 +322,7 @@ function modules.get_module(module_name)
     return modules.loaded_modules[module_name].public
 end
 
---- Returns the module.config.public table if the module is loaded
+--- Returns the module.config table if the module is loaded
 ---@param module_name string #The name of the module to retrieve (module must be loaded)
 function modules.get_module_config(module_name)
     if not modules.is_module_loaded(module_name) then
@@ -471,25 +471,25 @@ end
 function modules.create_meta(name, ...)
     local module = modules.create(name)
 
-    module.config.public.enable = { ... }
+    module.config.enable = { ... }
 
     module.setup = function()
         return { success = true }
     end
 
     module.load = function()
-        module.config.public.enable = (function()
+        module.config.enable = (function()
             -- If we haven't define any modules to disable then just return all enabled modules
-            if not module.config.public.disable then
-                return module.config.public.enable
+            if not module.config.disable then
+                return module.config.enable
             end
 
             local ret = {}
 
             -- For every enabled module
-            for _, mod in ipairs(module.config.public.enable) do
+            for _, mod in ipairs(module.config.enable) do
                 -- If that module does not exist in the disable table (ie. it is enabled) then add it to the `ret` table
-                if not vim.tbl_contains(module.config.public.disable, mod) then
+                if not vim.tbl_contains(module.config.disable, mod) then
                     table.insert(ret, mod)
                 end
             end
@@ -499,7 +499,7 @@ function modules.create_meta(name, ...)
         end)()
 
         -- Go through every module that we have defined in the metamodule and load it!
-        for _, mod in ipairs(module.config.public.enable) do
+        for _, mod in ipairs(module.config.enable) do
             modules.load_module(mod)
         end
     end

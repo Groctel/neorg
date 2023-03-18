@@ -24,6 +24,7 @@ local neorg = require("neorg.core")
 local modules = require("neorg.modules")
 local module = modules.create("core.norg.journal")
 local log = neorg.log
+local require_relative = require("neorg.utils").require_relative
 
 
 module.setup = function()
@@ -43,10 +44,10 @@ module.private = {
     ---@param time number #The time to open the journal entry at as returned by `os.time()`
     ---@param custom_date? string #A YYYY-mm-dd string that specifies a date to open the diary at instead
     open_diary = function(time, custom_date)
-        local workspace = module.config.public.workspace
+        local workspace = module.config.workspace
             or module.required["core.norg.dirman"].get_current_workspace()[1]
-        local folder_name = module.config.public.journal_folder
-        local template_name = module.config.public.template_name
+        local folder_name = module.config.journal_folder
+        local template_name = module.config.template_name
 
         if custom_date then
             local year, month, day = custom_date:match("^(%d%d%d%d)-(%d%d)-(%d%d)$")
@@ -64,8 +65,8 @@ module.private = {
         end
 
         local path = os.date(
-            type(module.config.public.strategy) == "function" and module.config.public.strategy(os.date("*t", time))
-                or module.config.public.strategy,
+            type(module.config.strategy) == "function" and module.config.strategy(os.date("*t", time))
+                or module.config.strategy,
             time
         )
 
@@ -81,7 +82,7 @@ module.private = {
 
         if
             not journal_file_exists
-            and module.config.public.use_template
+            and module.config.use_template
             and module.required["core.norg.dirman"].file_exists(
                 workspace_path .. "/" .. folder_name .. "/" .. template_name
             )
@@ -107,9 +108,9 @@ module.private = {
 
     --- Creates a template file
     create_template = function()
-        local workspace = module.config.public.workspace
-        local folder_name = module.config.public.journal_folder
-        local template_name = module.config.public.template_name
+        local workspace = module.config.workspace
+        local folder_name = module.config.journal_folder
+        local template_name = module.config.template_name
 
         module.required["core.norg.dirman"].create_file(
             folder_name .. neorg.configuration.pathsep .. template_name,
@@ -119,10 +120,10 @@ module.private = {
 
     --- Opens the toc file
     open_toc = function()
-        local workspace = module.config.public.workspace
+        local workspace = module.config.workspace
             or module.required["core.norg.dirman"].get_current_workspace()[1]
         local index = modules.get_module_config("core.norg.dirman").index
-        local folder_name = module.config.public.journal_folder
+        local folder_name = module.config.journal_folder
 
         -- If the toc exists, open it, if not, create it
         if module.required["core.norg.dirman"].file_exists(folder_name .. neorg.configuration.pathsep .. index) then
@@ -137,10 +138,10 @@ module.private = {
 
     --- Creates or updates the toc file
     create_toc = function()
-        local workspace = module.config.public.workspace
+        local workspace = module.config.workspace
             or module.required["core.norg.dirman"].get_current_workspace()[1]
         local index = modules.get_module_config("core.norg.dirman").index
-        local folder_name = module.config.public.journal_folder
+        local folder_name = module.config.journal_folder
 
         -- Each entry is a table that contains tables like { yy, mm, dd, link, title }
         local toc_entries = {}
@@ -220,7 +221,7 @@ module.private = {
                                             tonumber(file[1]),
                                             "{:$"
                                                 .. neorg.configuration.pathsep
-                                                .. module.config.public.journal_folder
+                                                .. module.config.journal_folder
                                                 .. neorg.configuration.pathsep
                                                 .. name
                                                 .. neorg.configuration.pathsep
@@ -262,7 +263,7 @@ module.private = {
                             parts[3],
                             "{:$"
                                 .. neorg.configuration.pathsep
-                                .. module.config.public.journal_folder
+                                .. module.config.journal_folder
                                 .. neorg.configuration.pathsep
                                 .. file[1]
                                 .. ":}",
@@ -274,7 +275,7 @@ module.private = {
 
             vim.schedule(function()
                 -- Gets a default format for the entries
-                local format = module.config.public.toc_format
+                local format = module.config.toc_format
                     or function(entries)
                         local months_text = {
                             "January",
@@ -325,30 +326,11 @@ module.private = {
     end,
 }
 
-module.config.public = {
-    -- which workspace to use for the journal files, default is the current
-    workspace = nil,
-    -- the name for the folder in which the journal files are put
-    journal_folder = "journal",
 
-    -- The strategy to use to create directories
-    -- can be "flat" (2022-03-02.norg), "nested" (2022/03/02.norg),
-    -- a lua string with the format given to `os.date()` or a lua function
-    -- that returns a lua string with the same format.
-    strategy = "nested",
+module.config = require_relative(..., "config")
 
-    -- the name of the template file
-    template_name = "template.norg",
-    -- use your journal_folder template
-    use_template = true,
 
-    -- formatter function used to generate the toc file
-    -- receives a table that contains tables like { yy, mm, dd, link, title }
-    -- must return a table of strings
-    toc_format = nil,
-}
-
-module.config.private = {
+module.private_config = {
     strategies = {
         flat = "%Y-%m-%d.norg",
         nested = "%Y/%m/%d.norg",
@@ -360,8 +342,8 @@ module.public = {
 }
 
 module.load = function()
-    if module.config.private.strategies[module.config.public.strategy] then
-        module.config.public.strategy = module.config.private.strategies[module.config.public.strategy]
+    if module.private_config.strategies[module.config.strategy] then
+        module.config.strategy = module.private_config.strategies[module.config.strategy]
     end
 
     module.required["core.neorgcmd"].add_commands_from_table({

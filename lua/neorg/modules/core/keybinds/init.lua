@@ -52,6 +52,7 @@ local neorg = require("neorg.core")
 local modules = require("neorg.modules")
 local module = modules.create("core.keybinds")
 local log = neorg.log
+local require_relative = require("neorg.utils").require_relative
 
 module.setup = function()
     return {
@@ -65,29 +66,14 @@ module.load = function()
     module.required["core.autocommands"].enable_autocommand("BufEnter")
     module.required["core.autocommands"].enable_autocommand("BufLeave")
 
-    if module.config.public.hook then
+    if module.config.hook then
         neorg.callbacks.on_event("enable_keybinds", function(_, keybinds)
-            module.config.public.hook(keybinds)
+            module.config.hook(keybinds)
         end)
     end
 end
 
-module.config.public = {
-    -- Use the default keybinds provided in https://github.com/nvim-neorg/neorg/blob/main/lua/neorg/modules/core/keybinds/keybinds.lua
-    default_keybinds = true,
-
-    -- Prefix for some Neorg keybinds
-    neorg_leader = "<LocalLeader>",
-
-    -- Function to be invoked that allows the user to change their keybinds
-    hook = nil,
-
-    -- The keybind preset to use
-    keybind_preset = "neorg",
-
-    -- An array of functions, each one corresponding to a separate preset
-    keybind_presets = {},
-}
+module.config = require_relative(..., "config")
 
 ---@class core.keybinds
 module.public = {
@@ -317,7 +303,7 @@ module.public = {
 
             -- Include the current Neorg mode and leader in the contents
             mode = current_mode,
-            leader = module.config.public.neorg_leader,
+            leader = module.config.neorg_leader,
         }
 
         local function generate_default_functions(cb, ...)
@@ -338,10 +324,10 @@ module.public = {
                 print(mode, vim.inspect(keys), vim.inspect(opts))
 
         if
-            module.config.public.default_keybinds
-            and module.config.public.keybind_presets[module.config.public.keybind_preset]
+            module.config.default_keybinds
+            and module.config.keybind_presets[module.config.keybind_preset]
         then
-            module.config.public.keybind_presets[module.config.public.keybind_preset](payload)
+            module.config.keybind_presets[module.config.keybind_preset](payload)
         end
 
         for _, callback in pairs(module.private.requested_keys) do

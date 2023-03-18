@@ -10,19 +10,19 @@ page for the engine you selected ([`nvim-cmp`](@core.integrations.nvim-cmp) or
 [`nvim-compe`](@core.integrations.nvim-compe)) to complete setup.
 --]]
 
+
+---@alias mod.norg.completion.engine
+---| `nvim-cmp` #@core.integrations.nvim-cmp
+---| `nvim-compe` #@core.integrations.nvim-cmp
+
+
 local neorg = require("neorg.core")
 local modules = require("neorg.modules")
 local module = modules.create("core.norg.completion")
+local require_relative = require("neorg.utils").require_relative
 
-module.config.public = {
-    -- The engine to use for completion.
-    --
-    -- Possible values:
-    -- - [`nvim-cmp`](@core.integrations.nvim-cmp)
-    -- - [`nvim-compe`](@core.integrations.nvim-compe)
-    engine = nil,
-    name = "[Neorg]",
-}
+module.config = require_relative(..., "config")
+
 
 module.setup = function()
     return { success = true, requires = { "core.integrations.treesitter" } }
@@ -34,18 +34,18 @@ module.private = {
 
 module.load = function()
     -- If we have not defined an engine then bail
-    if not module.config.public.engine then
+    if not module.config.engine then
         neorg.log.error("No engine specified, aborting...")
         return
     end
 
     -- If our engine is compe then attempt to load the integration module for nvim-compe
-    if module.config.public.engine == "nvim-compe" and modules.load_module("core.integrations.nvim-compe") then
+    if module.config.engine == "nvim-compe" and modules.load_module("core.integrations.nvim-compe") then
         module.private.engine = modules.get_module("core.integrations.nvim-compe")
-    elseif module.config.public.engine == "nvim-cmp" and modules.load_module("core.integrations.nvim-cmp") then
+    elseif module.config.engine == "nvim-cmp" and modules.load_module("core.integrations.nvim-cmp") then
         module.private.engine = modules.get_module("core.integrations.nvim-cmp")
     else
-        neorg.log.error("Unable to load completion module -", module.config.public.engine, "is not a recognized engine.")
+        neorg.log.error("Unable to load completion module -", module.config.engine, "is not a recognized engine.")
         return
     end
 
@@ -56,7 +56,7 @@ module.load = function()
 
     -- Create the integration engine's source
     module.private.engine.create_source({
-        completions = module.config.public.completions,
+        completions = module.config.completions,
     })
 end
 

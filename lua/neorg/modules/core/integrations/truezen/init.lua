@@ -1,5 +1,6 @@
 local modules = require("neorg.modules")
 local module = modules.create("core.integrations.truezen")
+local require_relative = require("neorg.utils").require_relative
 
 module.load = function()
     local success, truezen = pcall(require, "true-zen.main")
@@ -9,7 +10,7 @@ module.load = function()
     local _success, truezen_setup = pcall(require, "true-zen")
     assert(_success, "Unable to load truezen setup")
 
-    truezen_setup.setup(module.config.public)
+    truezen_setup.setup(module.config)
 
     module.private.truezen = truezen
 end
@@ -18,10 +19,7 @@ module.private = {
     truezen = nil,
 }
 
-module.config.public = {
-    -- truezen setup configs: https://github.com/Pocco81/TrueZen.nvim
-    setup = {},
-}
+module.config = require_relative(..., "config")
 
 ---@class core.integrations.truezen
 module.public = {

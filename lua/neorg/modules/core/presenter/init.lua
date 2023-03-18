@@ -9,6 +9,7 @@ local neorg = require("neorg.core")
 local modules = require("neorg.modules")
 local module = modules.create("core.presenter")
 local api = vim.api
+local require_relative = require("neorg.utils").require_relative
 
 module.setup = function()
     return {
@@ -31,9 +32,9 @@ module.load = function()
     ---@diagnostic disable-next-line: unused-local
     local keybinds = module.required["core.keybinds"]
 
-    if module.config.public.zen_mode == "truezen" then
+    if module.config.zen_mode == "truezen" then
         modules.load_module("core.integrations.truezen", module.name)
-    elseif module.config.public.zen_mode == "zen-mode" then
+    elseif module.config.zen_mode == "zen-mode" then
         modules.load_module("core.integrations.zen_mode", module.name)
     else
         neorg.log.error("Unrecognized mode for 'zen_mode' option. Please check your presenter config")
@@ -58,13 +59,7 @@ module.load = function()
     })
 end
 
-module.config.public = {
-    -- Zen mode plugin to use. Currenly suppported:
-    --
-    -- - `zen-mode` - https://github.com/folke/zen-mode.nvim
-    -- - `truezen` - https://github.com/Pocco81/TrueZen.nvim
-    zen_mode = "",
-}
+module.config = require_relative(..., "config")
 
 module.private = {
     data = {},
@@ -122,11 +117,11 @@ module.public = {
         end
 
         if
-            module.config.public.zen_mode == "truezen" and modules.is_module_loaded("core.integrations.truezen")
+            module.config.zen_mode == "truezen" and modules.is_module_loaded("core.integrations.truezen")
         then
             modules.get_module("core.integrations.truezen").toggle_ataraxis()
         elseif
-            module.config.public.zen_mode == "zen-mode" and modules.is_module_loaded("core.integrations.zen_mode")
+            module.config.zen_mode == "zen-mode" and modules.is_module_loaded("core.integrations.zen_mode")
         then
             modules.get_module("core.integrations.zen_mode").toggle()
         end
@@ -197,11 +192,11 @@ module.public = {
         module.required["core.mode"].set_mode(previous_mode)
 
         if
-            module.config.public.zen_mode == "truezen" and modules.is_module_loaded("core.integrations.truezen")
+            module.config.zen_mode == "truezen" and modules.is_module_loaded("core.integrations.truezen")
         then
             modules.get_module("core.integrations.truezen").toggle_ataraxis()
         elseif
-            module.config.public.zen_mode == "zen-mode" and modules.is_module_loaded("core.integrations.zen_mode")
+            module.config.zen_mode == "zen-mode" and modules.is_module_loaded("core.integrations.zen_mode")
         then
             modules.get_module("core.integrations.zen_mode").toggle()
         end

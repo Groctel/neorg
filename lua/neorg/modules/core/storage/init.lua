@@ -8,6 +8,7 @@
 
 local modules = require("neorg.modules")
 local module = modules.create("core.storage")
+local require_relative = require("neorg.utils").require_relative
 
 module.setup = function()
     return {
@@ -17,10 +18,7 @@ module.setup = function()
     }
 end
 
-module.config.public = {
-    -- Full path to store data (saved in mpack data format)
-    path = vim.fn.stdpath("data") .. "/neorg.mpack",
-}
+module.config = require_relative(..., "config")
 
 module.private = {
     data = {},
@@ -30,7 +28,7 @@ module.private = {
 module.public = {
     --- Grabs the data present on disk and overwrites it with the data present in memory
     sync = function()
-        local file = io.open(module.config.public.path, "r")
+        local file = io.open(module.config.path, "r")
 
         if not file then
             return
@@ -65,7 +63,7 @@ module.public = {
 
     --- Flushes the contents in memory to the location specified in the `path` configuration option.
     flush = function()
-        local file = io.open(module.config.public.path, "w")
+        local file = io.open(module.config.path, "w")
 
         if not file then
             return

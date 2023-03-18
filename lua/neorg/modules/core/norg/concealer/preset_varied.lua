@@ -1,8 +1,7 @@
-local neorg = require("neorg.core")
 local modules = require("neorg.modules")
 local module = modules.extend("core.norg.concealer.preset_varied", "core.norg.concealer")
 
-module.config.private.icon_preset_varied = {
+module.private_config.icon_preset_varied = {
     heading = {
         enabled = true,
 

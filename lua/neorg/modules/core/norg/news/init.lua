@@ -8,6 +8,7 @@
 local neorg = require("neorg.core")
 local modules = require("neorg.modules")
 local module = modules.create("core.norg.news")
+local require_relative = require("neorg.utils").require_relative
 
 local function is_version_greater_than(ver1, ver2)
     -- Here we assume that the versions aren't malformed
@@ -27,12 +28,12 @@ module.setup = function()
     }
 end
 
-module.config.public = {
-    check_news = true,
-}
+
+module.config = require_relative(..., "config")
+
 
 module.load = function()
-    if not module.config.public.check_news then
+    if not module.config.check_news then
         return
     end
 

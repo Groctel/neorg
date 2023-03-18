@@ -5,6 +5,7 @@
 local neorg = require("neorg.core")
 local modules = require("neorg.modules")
 local module = modules.create("core.itero")
+local require_relative = require("neorg.utils").require_relative
 
 module.setup = function()
     return {
@@ -15,25 +16,9 @@ module.setup = function()
     }
 end
 
-module.config.public = {
-    -- A list of strings detailing what nodes can be "iterated".
-    -- Usually doesn't need to be changed, unless you want to disable some
-    -- items from being iterable.
-    iterables = {
-        "unordered_list%d",
-        "ordered_list%d",
-        "heading%d",
-        "quote%d",
-    },
+module.config = require_relative(..., "config")
 
-    -- Which items to retain extensions for
-    retain_extensions = {
-        ["unordered_list%d"] = true,
-        ["ordered_list%d"] = true,
-    },
-}
-
-module.config.private = {
+module.private_config = {
     stop_types = {
         "generic_list",
         "quote",
@@ -49,7 +34,7 @@ module.on_event = function(event)
         local ts = module.required["core.integrations.treesitter"]
         local cursor_pos = event.cursor_position[1] - 1
 
-        local current = ts.get_first_node_on_line(event.buffer, cursor_pos, module.config.private.stop_types)
+        local current = ts.get_first_node_on_line(event.buffer, cursor_pos, module.private_config.stop_types)
 
         if not current then
             neorg.log.error(
@@ -60,7 +45,7 @@ module.on_event = function(event)
 
         while current:parent() do
             if
-                neorg.lib.filter(module.config.public.iterables, function(_, iterable)
+                neorg.lib.filter(module.config.iterables, function(_, iterable)
                     return current:type():match(table.concat({ "^", iterable, "$" })) and iterable or nil
                 end)
             then
@@ -76,7 +61,7 @@ module.on_event = function(event)
         end
 
         local should_append_extension = neorg.lib.filter(
-            module.config.public.retain_extensions,
+            module.config.retain_extensions,
             function(match, should_append)
                 return current:type():match(match) and should_append or nil
             end

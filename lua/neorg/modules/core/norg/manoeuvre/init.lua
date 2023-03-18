@@ -11,6 +11,7 @@
 local neorg = require("neorg.core")
 local modules = require("neorg.modules")
 local module = modules.create("core.norg.manoeuvre")
+local require_relative = require("neorg.utils").require_relative
 
 module.setup = function()
     if not neorg.utils.is_minimum_version(0, 7, 0) then
@@ -36,28 +37,9 @@ module.load = function()
     })
 end
 
-module.config.public = {
-    moveables = {
-        headings = {
-            "heading%d",
-            "heading%d",
-        },
-        todo_items = {
-            "todo_item%d",
-            {
-                "todo_item%d",
-                "unordered_list%d",
-            },
-        },
-        unordered_list_elements = {
-            "unordered_list%d",
-            {
-                "todo_item%d",
-                "unordered_list%d",
-            },
-        },
-    },
-}
+
+module.config = require_relative(..., "config")
+
 
 ---@class core.norg.manoeuvre
 module.public = {
@@ -164,7 +146,7 @@ local function highlight_node(node)
     vim.cmd("normal! gv")
 end
 
-module.config.private = {
+module.private_config = {
     textobjects = {
         ["around-heading"] = function(node)
             return highlight_node(find(node, "^heading%d+$"))
@@ -186,7 +168,7 @@ module.config.private = {
 }
 
 module.on_event = function(event)
-    local config = module.config.public.moveables
+    local config = module.config.moveables
 
     if event.name == "core.norg.manoeuvre.item_down" then
         for _, data in pairs(config) do
@@ -201,7 +183,7 @@ module.on_event = function(event)
 
         if textobj then
             local textobject_type = event.name:sub(textobj + string.len("textobject") + 1)
-            local textobj_lookup = module.config.private.textobjects[textobject_type]
+            local textobj_lookup = module.private_config.textobjects[textobject_type]
 
             if textobj_lookup then
                 return textobj_lookup(

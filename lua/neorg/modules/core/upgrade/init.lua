@@ -1,6 +1,7 @@
 local neorg = require("neorg.core")
 local modules = require("neorg.modules")
 local module = modules.create("core.upgrade")
+local require_relative = require("neorg.utils").require_relative
 
 module.setup = function()
     return {
@@ -11,11 +12,9 @@ module.setup = function()
     }
 end
 
-module.config.public = {
-    -- Whether to prompt the user to back up their file
-    -- every time they want to upgrade a `.norg` document.
-    ask_for_backup = true,
-}
+
+module.config = require_relative(..., "config")
+
 
 module.load = function()
     modules.await("core.neorgcmd", function(neorgcmd)
@@ -188,7 +187,7 @@ module.on_event = function(event)
                 return vim.fn.expand("%")
             end)
 
-            if module.config.public.ask_for_backup then
+            if module.config.ask_for_backup then
                 local halt = false
 
                 vim.notify(
@@ -253,7 +252,7 @@ module.on_event = function(event)
                 end
             end
 
-            if module.config.public.ask_for_backup then
+            if module.config.ask_for_backup then
                 local halt = false
 
                 vim.notify(

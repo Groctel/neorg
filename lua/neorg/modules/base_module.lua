@@ -25,25 +25,15 @@ local base = {
         version = neorg.configuration.version,
     },
 
-    -- Configuration for the module
-    config = {
-        -- Private module configuration, cannot be changed by other modules or by the user
-        private = { --[[
-            config_option = false,
-            option_group = { sub_option = true }
-        --]] },
-
-        -- Public config, can be changed by modules and the user
-        public = { --[[
-            config_option = false,
-            option_group = { sub_option = true }
-        --]] },
-
-        -- This table houses all the changes the user made to the public table,
-        -- useful for when you want to know exactly what the user tinkered with.
-        -- Shouldn't be commonly used.
-        custom = {},
-    },
+    -- Configuration for the module. Options and groups preceded by "_" are
+    -- private and should be type hinted as such.
+    config = { --[[
+        config_option = false,
+        option_group = { sub_option = true }
+    --]] },
+    -- TODO: Remove and move to local tables
+    private_config = {},
+    custom_config = {},
 
     -- Event data regarding the current module
     events = {

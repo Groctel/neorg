@@ -27,8 +27,6 @@ module.load = function()
     )
 end
 
-module.config.public = {}
-
 module.private = {
     types = {
         heading = {

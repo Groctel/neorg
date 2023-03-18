@@ -36,6 +36,7 @@ local neorg = require("neorg.core")
 local modules = require("neorg.modules")
 local module = modules.create("core.norg.dirman")
 local scan = require("plenary.scandir")
+local require_relative = require("neorg.utils").require_relative
 
 module.setup = function()
     return {
@@ -46,8 +47,8 @@ end
 
 module.load = function()
     -- Go through every workspace and expand special symbols like ~
-    for name, workspace_location in pairs(module.config.public.workspaces) do
-        module.config.public.workspaces[name] = vim.fn.expand(workspace_location)
+    for name, workspace_location in pairs(module.config.workspaces) do
+        module.config.workspaces[name] = vim.fn.expand(workspace_location)
     end
 
     module.required["core.keybinds"].register_keybind(module.name, "new.note")
@@ -65,9 +66,9 @@ module.load = function()
     -- Synchronize core.neorgcmd autocompletions
     module.public.sync()
 
-    if module.config.public.open_last_workspace and vim.fn.argc(-1) == 0 then
-        if module.config.public.open_last_workspace == "default" then
-            if not module.config.public.default_workspace then
+    if module.config.open_last_workspace and vim.fn.argc(-1) == 0 then
+        if module.config.open_last_workspace == "default" then
+            if not module.config.default_workspace then
                 neorg.log.warn(
                     'Configuration error in `core.norg.dirman`: the `open_last_workspace` option is set to "default", but no default workspace is provided in the `default_workspace` configuration variable. Defaulting to opening the last known workspace.'
                 )
@@ -75,33 +76,17 @@ module.load = function()
                 return
             end
 
-            module.public.open_workspace(module.config.public.default_workspace)
+            module.public.open_workspace(module.config.default_workspace)
         else
             module.public.set_last_workspace()
         end
-    elseif module.config.public.default_workspace then
-        module.public.set_workspace(module.config.public.default_workspace)
+    elseif module.config.default_workspace then
+        module.public.set_workspace(module.config.default_workspace)
     end
 end
 
-module.config.public = {
-    -- The list of active workspaces
-    workspaces = {
-        default = vim.fn.getcwd(),
-    },
 
-    -- The name for the index file
-    index = "index.norg",
-
-    -- The default workspace to set whenever Neovim starts.
-    default_workspace = nil,
-
-    -- Whether to open the last workspace's index file when `nvim` is executed
-    -- without arguments.
-    -- May also be set to the string `"default"`, due to which Neorg will always
-    -- open up the index file for the workspace defined in `default_workspace`.
-    open_last_workspace = false,
-}
+module.config = require_relative(..., "config")
 
 module.private = {
     current_workspace = { "default", vim.fn.getcwd() },
@@ -110,17 +95,17 @@ module.private = {
 ---@class core.norg.dirman
 module.public = {
     get_workspaces = function()
-        return module.config.public.workspaces
+        return module.config.workspaces
     end,
 
     get_workspace_names = function()
-        return vim.tbl_keys(module.config.public.workspaces)
+        return vim.tbl_keys(module.config.workspaces)
     end,
 
     --- If present retrieve a workspace's path by its name, else returns nil
     ---@param name string #The name of the workspace
     get_workspace = function(name)
-        return module.config.public.workspaces[name]
+        return module.config.workspaces[name]
     end,
 
     --- Returns a table in the format { "workspace_name", "path" }
@@ -133,7 +118,7 @@ module.public = {
     ---@param ws_name string #The name of a valid namespace we want to switch to
     set_workspace = function(ws_name)
         -- Grab the workspace location
-        local workspace = module.config.public.workspaces[ws_name]
+        local workspace = module.config.workspaces[ws_name]
         -- Create a new object describing our new workspace
         local new_workspace = { ws_name, workspace }
 
@@ -172,12 +157,12 @@ module.public = {
     ---@param workspace_path string #A full path to the workspace root
     add_workspace = function(workspace_name, workspace_path)
         -- If the module already exists then bail
-        if module.config.public.workspaces[workspace_name] then
+        if module.config.workspaces[workspace_name] then
             return false
         end
 
         -- Set the new workspace and its path accordingly
-        module.config.public.workspaces[workspace_name] = workspace_path
+        module.config.workspaces[workspace_name] = workspace_path
         -- Broadcast the workspace_added event with the newly added workspace as the payload
         neorg.events.new(
             module,
@@ -194,7 +179,7 @@ module.public = {
     --- If the file we opened is within a workspace directory, returns the name of the workspace, else returns nil
     get_workspace_match = function()
         -- Cache the current working directory
-        module.config.public.workspaces.default = vim.fn.getcwd()
+        module.config.workspaces.default = vim.fn.getcwd()
 
         -- Grab the working directory of the current open file
         local realcwd = vim.fn.expand("%:p:h")
@@ -206,7 +191,7 @@ module.public = {
         local result = ""
 
         -- Find a matching workspace
-        for workspace, location in pairs(module.config.public.workspaces) do
+        for workspace, location in pairs(module.config.workspaces) do
             if workspace ~= "default" then
                 -- Expand all special symbols like ~ etc. and escape special characters
                 local expanded = string.gsub(vim.fn.expand(location), "%p", "%%%1")
@@ -341,7 +326,7 @@ module.public = {
 
         local last_workspace = storage.retrieve("last_workspace")
         last_workspace = type(last_workspace) == "string" and last_workspace
-            or module.config.public.default_workspace
+            or module.config.default_workspace
             or ""
 
         local workspace_path = module.public.get_workspace(last_workspace)
@@ -353,7 +338,7 @@ module.public = {
 
         -- If we were successful in switching to that workspace then begin editing that workspace's index file
         if module.public.set_workspace(last_workspace) then
-            vim.cmd("e " .. workspace_path .. neorg.configuration.pathsep .. module.config.public.index)
+            vim.cmd("e " .. workspace_path .. neorg.configuration.pathsep .. module.config.index)
 
             vim.notify("Last Workspace -> " .. workspace_path)
         end
@@ -427,7 +412,7 @@ module.public = {
 
         -- If we're switching to a workspace that isn't the default workspace then enter the index file
         if workspace ~= "default" then
-            vim.cmd("e " .. ws_match .. neorg.configuration.pathsep .. module.config.public.index)
+            vim.cmd("e " .. ws_match .. neorg.configuration.pathsep .. module.config.index)
         end
     end,
 
@@ -489,10 +474,10 @@ module.on_event = function(event)
     -- If somebody has executed the :Neorg index command then
     if event.name == "dirman.index" then
         local current_ws = module.public.get_current_workspace()
-        local index_path = table.concat({ current_ws[2], "/", module.config.public.index })
+        local index_path = table.concat({ current_ws[2], "/", module.config.index })
 
         if vim.fn.filereadable(index_path) == 0 then
-            vim.notify(table.concat({ "No '", module.config.public.index, "' found in current workspace!" }))
+            vim.notify(table.concat({ "No '", module.config.index, "' found in current workspace!" }))
             return
         end
 

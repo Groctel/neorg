@@ -8,6 +8,7 @@
 local neorg = require("neorg.core")
 local modules = require("neorg.modules")
 local module = modules.create("core.integrations.treesitter")
+local require_relative = require("neorg.utils").require_relative
 
 module.private = {
     ts_utils = nil,
@@ -49,17 +50,17 @@ module.load = function()
 
     assert(success, "Unable to load nvim-treesitter.ts_utils :(")
 
-    if module.config.public.configure_parsers then
+    if module.config.configure_parsers then
         -- luacheck: push ignore
 
         local parser_configs = require("nvim-treesitter.parsers").get_parser_configs()
 
         parser_configs.norg = {
-            install_info = module.config.public.parser_configs.norg,
+            install_info = module.config.parser_configs.norg,
         }
 
         parser_configs.norg_meta = {
-            install_info = module.config.public.parser_configs.norg_meta,
+            install_info = module.config.parser_configs.norg_meta,
         }
 
         module.required["core.neorgcmd"].add_commands_from_table({
@@ -81,7 +82,7 @@ module.load = function()
                     return
                 end
 
-                if module.config.public.install_parsers then
+                if module.config.install_parsers then
                     require("nvim-treesitter.install").commands.TSInstallSync["run!"]("norg", "norg_meta")
                     module.public.parser_path = vim.api.nvim_get_runtime_file("parser/norg.so", false)[1]
                 else
@@ -103,31 +104,7 @@ module.load = function()
     )
 end
 
-module.config.public = {
-    --- If true will auto-configure the parsers to use the recommended setup.
-    --  Sometimes `nvim-treesitter`'s repositories lag behind and this is the only good fix.
-    configure_parsers = true,
-
-    --- If true will automatically install parsers if they are not present.
-    install_parsers = true,
-
-    --- Configurations for each parser as expected by `nvim-treesitter`.
-    --  If you want to tweak your parser configs you can do so here.
-    parser_configs = {
-        norg = {
-            url = "https://github.com/nvim-neorg/tree-sitter-norg",
-            files = { "src/parser.c", "src/scanner.cc" },
-            branch = "main",
-            revision = "6348056b999f06c2c7f43bb0a5aa7cfde5302712",
-        },
-        norg_meta = {
-            url = "https://github.com/nvim-neorg/tree-sitter-norg-meta",
-            files = { "src/parser.c" },
-            branch = "main",
-            revision = "e93dcbc56a472649547cfc288f10ae4a93ef8795",
-        },
-    },
-}
+module.config = require_relative(..., "config")
 
 ---@class core.integrations.treesitter
 module.public = {

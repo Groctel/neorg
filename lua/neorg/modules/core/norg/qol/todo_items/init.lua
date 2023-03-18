@@ -18,6 +18,7 @@ Some available keybinds
 local neorg = require("neorg.core")
 local modules = require("neorg.modules")
 local module = modules.create("core.norg.qol.todo_items")
+local require_relative = require("neorg.utils").require_relative
 
 module.setup = function()
     return { success = true, requires = { "core.keybinds", "core.integrations.treesitter" } }
@@ -38,14 +39,9 @@ module.load = function()
     )
 end
 
-module.config.public = {
-    -- The order of cycling between todo items
-    order = {
-        { "undone", " " },
-        { "done", "x" },
-        { "pending", "-" },
-    },
-}
+
+module.config = require_relative(..., "config")
+
 
 ---@class core.norg.qol.todo_items
 module.public = {
@@ -334,9 +330,9 @@ module.on_event = function(event)
             )
             module.public.update_parent(event.buffer, event.cursor_position[1] - 1, 0)
         elseif event.name == todo_str .. "task_cycle" then
-            module.public.task_cycle(event.buffer, event.cursor_position[1], module.config.public.order)
+            module.public.task_cycle(event.buffer, event.cursor_position[1], module.config.order)
         elseif event.name == todo_str .. "task_cycle_reverse" then
-            module.public.task_cycle(event.buffer, event.cursor_position[1], vim.fn.reverse(module.config.public.order))
+            module.public.task_cycle(event.buffer, event.cursor_position[1], vim.fn.reverse(module.config.order))
         end
     end
 end

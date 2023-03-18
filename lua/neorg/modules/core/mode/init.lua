@@ -16,15 +16,13 @@ which can be used by the user to switch modes.
 local neorg = require("neorg.core")
 local modules = require("neorg.modules")
 local module = modules.create("core.mode")
+local require_relative = require("neorg.utils").require_relative
 
 local log = neorg.log
 
-module.config.public = {
-    -- Stores the current mode
-    current_mode = "norg",
-    -- Stores the previous mode
-    previous_mode = "norg",
-}
+
+module.config = require_relative(..., "config")
+
 
 module.private = {
     -- All the currently defined modes
@@ -62,7 +60,7 @@ module.public = {
         neorg.events.new(
             module,
             "mode_created",
-            { current = module.config.public.current_mode, new = mode_name }
+            { current = module.config.current_mode, new = mode_name }
         ):broadcast(modules.loaded_modules)
 
         -- Define the autocompletion tables and make them include the current mode
@@ -80,7 +78,7 @@ module.public = {
     ---@param mode_name string #The name of the mode to switch to
     set_mode = function(mode_name)
         -- If the mode name is the same as it used to be then don't bother
-        if module.config.public.current_mode == mode_name then
+        if module.config.current_mode == mode_name then
             return
         end
 
@@ -91,14 +89,14 @@ module.public = {
         end
 
         -- Set the previous mode to the current one, then set the current mode to the new mode
-        module.config.public.previous_mode = module.config.public.current_mode
-        module.config.public.current_mode = mode_name
+        module.config.previous_mode = module.config.current_mode
+        module.config.current_mode = mode_name
 
         -- Broadcast the mode_set event to all subscribed modules
         neorg.events.new(
             module,
             "mode_set",
-            { current = module.config.public.previous_mode, new = mode_name }
+            { current = module.config.previous_mode, new = mode_name }
         ):broadcast(modules.loaded_modules)
     end,
 
@@ -109,12 +107,12 @@ module.public = {
     end,
 
     get_mode = function()
-        return module.config.public.current_mode
+        return module.config.current_mode
     end,
 
     --- Retrieves the mode that was set before the current one
     get_previous_mode = function()
-        return module.config.public.previous_mode
+        return module.config.previous_mode
     end,
 
     get_modes = function()

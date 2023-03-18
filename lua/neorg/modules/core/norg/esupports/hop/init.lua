@@ -9,6 +9,7 @@ local neorg = require("neorg.core")
 local modules = require("neorg.modules")
 local module = modules.create("core.norg.esupports.hop")
 local job = require("plenary.job")
+local require_relative = require("neorg.utils").require_relative
 
 module.setup = function()
     return {
@@ -26,12 +27,7 @@ module.load = function()
     module.required["core.keybinds"].register_keybind(module.name, "hop-link")
 end
 
-module.config.public = {
-    lookahead = true,
-    fuzzing_threshold = 0.5,
-    -- List of strings specifying which filetypes to open in an external application
-    external_filetypes = {},
-}
+module.config = require_relative(..., "config")
 
 ---@class core.norg.esupports.hop
 module.public = {
@@ -163,7 +159,7 @@ module.public = {
         )
 
         if not found_node then
-            found_node = (module.config.public.lookahead and module.public.lookahead_link_node())
+            found_node = (module.config.lookahead and module.public.lookahead_link_node())
         end
 
         return found_node
@@ -430,7 +426,7 @@ module.public = {
                     pdf = open_in_external_app,
                     png = open_in_external_app,
                     [{ "jpg", "jpeg" }] = open_in_external_app,
-                    [module.config.public.external_filetypes] = open_in_external_app,
+                    [module.config.external_filetypes] = open_in_external_app,
                     _ = neorg.lib.wrap(vim.api.nvim_exec, "e " .. vim.fn.fnamemodify(destination, ":p"), false),
                 })
 
@@ -729,7 +725,7 @@ module.private = {
                 local similarity = module.private.calculate_similarity(parsed_link_information.link_location_text, text)
 
                 -- If our match is similar enough then add it to the list
-                if similarity < module.config.public.fuzzing_threshold then
+                if similarity < module.config.fuzzing_threshold then
                     table.insert(similarities, { similarity = similarity, text = text, node = node:parent() })
                 end
             end

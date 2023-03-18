@@ -18,13 +18,14 @@ Neorg also supports exporting a directory of files: this is where the `:Neorg ex
 It takes 3 arguments:
 - `directory` - the directory to export
 - `filetype` - the filetype to export to
-- `output-dir` (optional) - a custom output directory to use. If not provided will fall back to `config.public.export_dir`
+- `output-dir` (optional) - a custom output directory to use. If not provided will fall back to `config.export_dir`
   (see [configuration](#configuration)).
 --]]
 
 local neorg = require("neorg.core")
 local modules = require("neorg.modules")
 local module = modules.create("core.export")
+local require_relative = require("neorg.utils").require_relative
 
 module.setup = function()
     return {
@@ -59,11 +60,9 @@ module.load = function()
     end)
 end
 
-module.config.public = {
-    --- The directory to export to when running `:Neorg export directory`.
-    -- The string can be formatted with the special keys: `<export-dir>` and `<language>`.
-    export_dir = "<export-dir>/<language>-export",
-}
+
+module.config = require_relative(..., "config")
+
 
 module.public = {
     --- Returns a module that can handle conversion from `.norg` to the target filetype
@@ -234,7 +233,7 @@ module.on_event = function(event)
         end)
     elseif event.name == "export.directory" then
         local path = event.payload[3] and vim.fn.expand(event.payload[3])
-            or module.config.public.export_dir
+            or module.config.export_dir
                 :gsub("<language>", event.payload[2])
                 :gsub("<export%-dir>", event.payload[1])
         vim.fn.mkdir(path, "p")

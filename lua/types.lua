@@ -22,3 +22,12 @@
 ---@class cursor_pos: vec<integer>
 ---@see nvim_win_get_cursor
 --- NOTE:tuple<integer,2>
+
+---@class path: string
+---@see vim.fn.getcwd
+
+
+-- String literals stored here for convenience
+--------------------------------------------------------------------------------
+
+---@alias string.default `default`
